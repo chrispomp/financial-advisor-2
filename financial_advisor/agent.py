@@ -6,7 +6,7 @@ from google.adk.tools import google_search
 from . import prompt
 
 MODEL = "gemini-2.5-flash"
-
+ 
 
 market_analyst = LlmAgent(
     name="market_analyst",
