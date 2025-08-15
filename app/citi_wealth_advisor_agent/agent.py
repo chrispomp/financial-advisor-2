@@ -51,7 +51,7 @@ def get_client_profile() -> str:
       },
       "financial_snapshot_usd": {
         "net_worth": 7450000,
-        "total_assets": 8850000,
+        "total_assets": 9050000,
         "total_liabilities": 1400000,
         "assets": [
           {
