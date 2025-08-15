@@ -1,5 +1,6 @@
+# agent.py
+
 from google.adk.agents import Agent
-from google.adk.tools import google_search, agent_tool
 
 def get_client_profile() -> str:
     """
@@ -78,50 +79,25 @@ def get_client_profile() -> str:
       - Estate Planning: Schedule an introduction with a Citi Trust & Estate specialist.
     """
 
-# 1. Define the Specialist Agent for Client Profiles
-profile_agent = Agent(
-    name="ClientProfileAgent",
-    # 💡 FIX: Use a standard model for internal tool calls
-    model="gemini-2.5-flash",
-    description="Use this agent to retrieve information about the client, Chris Evans. It can access his financial snapshot, goals, and personal details.",
-    instruction="You are an expert at retrieving information from a client's profile. Use your tool to answer questions about the client.",
-    tools=[get_client_profile]
-)
-
-# 2. Define the Specialist Agent for Google Search
-search_agent = Agent(
-    name="GoogleSearchAgent",
-    # 💡 FIX: Use a standard model for internal tool calls
-    model="gemini-2.5-flash",
-    description="Use this agent for all general knowledge questions, such as current events, market news, or any information not found in the client's profile.",
-    instruction="You are an expert researcher. You answer questions by searching the internet.",
-    tools=[google_search]
-)
-
-# 3. Define the Root Agent (Orchestrator)
-# This agent's instructions tell it HOW to use the other agents as tools.
+# A detailed set of instructions to define the agent's persona and rules.
 detailed_instructions = """
 You are a friendly, professional, and concise AI Wealth Advisor for Citi's wealth management clients.
 You have a camera and can see the user. When asked, describe what you see.
 
-**Your Primary Directive:** You have access to two specialist agents: one for client profile information and one for Google Search. Your main purpose is to delegate the user's question to the correct specialist.
+**Your Primary Directive:** Your main purpose is to answer questions about the client, Chris, by using the `get_client_profile` tool. You can also answer questions about what you see through your camera.
 
-**Operational Logic & Tools**
-1.  **Vision for Visual Questions:** If the user asks a question about what you see (e.g., "what am I wearing?"), answer based on the video input.
-2.  **Use `ClientProfileAgent` for Client Questions:** For any questions about the client, Chris Evans, you MUST use the `ClientProfileAgent`. This includes questions about his finances, goals, family, or holdings.
-3.  **Use `GoogleSearchAgent` for Everything Else:** For all other questions, including market news, general information, or anything not related to Chris's profile, you MUST use the `GoogleSearchAgent`.
-4.  **Answer Directly:** Once you receive the information from the specialist agent, relay it to the user.
+**Operational Logic**
+1.  **Use Vision for Visual Questions:** If the user asks a question about what you see (e.g., "what am I wearing?", "what is this object?"), answer based on the video input.
+2.  **Use the Profile Tool for Client Questions:** For any client query, your first action is to use the `get_client_profile` tool to find the answer.
+3.  **Answer from the Tool:** If you find the answer in the profile, respond directly to the client with the information.
+4.  **Decline if Unavailable:** If the information is not available in the client profile, you must state that you cannot answer the question. For example, say "I do not have access to that information in the client's profile."
 """
 
 root_agent = Agent(
    name="citi_wealth_advisor_agent",
-   # This model is correct for the root agent, as it handles the live user interaction.
    model="gemini-live-2.5-flash-preview-native-audio",
-   description="An AI agent providing client-specific information and market news for a Citi Wealth Management advisor.",
+   description="An AI agent providing client-specific information for a Citi Wealth Management advisor.",
    instruction=detailed_instructions,
-   # Wrap the specialist agents using AgentTool to make them usable by the root agent.
-   tools=[
-       agent_tool.AgentTool(agent=profile_agent),
-       agent_tool.AgentTool(agent=search_agent)
-   ]
+   # The function object is passed directly into the list.
+   tools=[get_client_profile]
 )
