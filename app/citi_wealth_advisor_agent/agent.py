@@ -36,6 +36,7 @@ class LiveInterruptPlugin(BasePlugin):
             invocation_context.end_invocation = True
             
             # Return a quick text response to acknowledge the interruption.
+            # This response will be returned immediately, short-circuiting the LLM call.
             return types.Content(parts=[types.Part(text="I'm listening.")])
 
         # Returning None allows the original model call to proceed.
@@ -282,7 +283,7 @@ profile_agent = Agent(
 search_agent = Agent(
     name="GoogleSearchAgent",
     model="gemini-2.5-flash-lite",
-    description="Use this agent for all general knowledge questions, such as current events, market news, or any information not found in the client's profile.",
+    description="Use this agent for all general knowledge questions, such as current events, market news, or any information not found in the client's profile. This can be anything like sports scores, weather forecast, or things to do locally",
     instruction="You are an expert researcher. You answer questions by searching the internet.",
     tools=[google_search]
 )
@@ -345,10 +346,9 @@ async def run_live_agent(query: str, user_id: str, session_id: str):
             )
         ),
         response_modalities=["AUDIO", "TEXT", "VIDEO"],
-        # Adding this proactivity config to prioritize user input.
+        # A lower number here will make the model more likely to be interrupted.
         proactivity=types.ProactivityConfig(
-            # A lower number here will make the model more likely to be interrupted.
-            level=1.0
+            level=0.5
         )
     )
 
@@ -357,6 +357,7 @@ async def run_live_agent(query: str, user_id: str, session_id: str):
         parts=[types.Part(text=query)]
     )
     live_request_queue.send_content(initial_message)
+    await live_request_queue.close() # Explicitly close the initial stream
 
     print(f"User Query: {query}")
     print("-" * 30)
@@ -375,12 +376,89 @@ async def run_live_agent(query: str, user_id: str, session_id: str):
                     print("Agent is streaming audio...")
                     
     await runner.close()
+    
+# In a real application, you would be sending data from a client to the live_request_queue.
+# This function simulates that.
+async def run_simulated_interruption(query1: str, query2: str, user_id: str, session_id: str):
+    runner = InMemoryRunner(
+        agent=root_agent,
+        plugins=[LiveInterruptPlugin()]
+    )
+
+    live_request_queue = LiveRequestQueue()
+
+    run_config = RunConfig(
+        streaming_mode=StreamingMode.BIDI,
+        speech_config=types.SpeechConfig(
+            voice_config=types.VoiceConfig(
+                prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                    voice_name='en-US-Standard-C'
+                )
+            )
+        ),
+        response_modalities=["AUDIO", "TEXT", "VIDEO"],
+        # A lower number makes the model more likely to be interrupted.
+        proactivity=types.ProactivityConfig(
+            level=0.5
+        )
+    )
+
+    # Simulate the first, longer query
+    async def send_first_query():
+        initial_message = types.Content(
+            role="user",
+            parts=[types.Part(text=query1)]
+        )
+        live_request_queue.send_content(initial_message)
+        # We don't close the stream here to simulate the agent starting to talk.
+    
+    # Simulate the second query that interrupts the first
+    async def send_interrupt_query():
+        await asyncio.sleep(2) # Wait a bit for the first query to start processing
+        print("\n--- Simulating User Interruption ---")
+        interrupt_message = types.Content(
+            role="user",
+            parts=[types.Part(text=query2)]
+        )
+        live_request_queue.send_content(interrupt_message)
+        # We close the stream here to indicate the interruption is the full new message
+        await live_request_queue.close()
+
+
+    print(f"Simulated Query 1: {query1}")
+    print(f"Simulated Interruption Query 2: {query2}")
+    print("-" * 30)
+
+    async with asyncio.TaskGroup() as tg:
+        tg.create_task(send_first_query())
+        tg.create_task(send_interrupt_query())
+        async for event in runner.run_live(
+            user_id=user_id,
+            session_id=session_id,
+            live_request_queue=live_request_queue,
+            run_config=run_config
+        ):
+            if event.content and event.content.parts:
+                for part in event.content.parts:
+                    if part.text:
+                        print(f"Agent Response: {part.text}")
+                    if hasattr(part, "inline_data") and part.inline_data:
+                        print("Agent is streaming audio...")
+    
+    await runner.close()
+
 
 async def main():
-    # Simulate two queries to demonstrate a full turn and a new session
-    # In a live app, this would be handled by your web server or client.
+    # Example 1: Standard conversation
     await run_live_agent("Hello, who are you?", "user_123", "session_001")
-    await run_live_agent("What is the current market outlook?", "user_123", "session_002")
+    
+    print("\n\n" + "="*50 + "\n\n")
+
+    # Example 2: Interruption demonstration
+    # Here, "What is the capital of France?" will interrupt the agent
+    # while it's responding to "Tell me about yourself."
+    await run_simulated_interruption("Tell me about yourself in a very, very long and detailed paragraph.", "What is the capital of France?", "user_123", "session_002")
+
 
 if __name__ == "__main__":
     asyncio.run(main())
