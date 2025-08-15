@@ -1,8 +1,45 @@
 import json
-from google.adk.agents import Agent
+import asyncio
+from google.adk.agents import Agent, LiveRequestQueue
 from google.adk.tools import google_search, agent_tool
 from google.adk.agents.callback_context import CallbackContext
 from google.genai import types
+from google.adk.runners import Runner, InMemoryRunner
+from google.adk.sessions import InMemorySessionService
+from google.adk.agents.run_config import RunConfig, StreamingMode
+from google.adk.plugins.base_plugin import BasePlugin
+import datetime
+from zoneinfo import ZoneInfo
+import os
+
+# --- Live Interrupt Plugin ---
+class LiveInterruptPlugin(BasePlugin):
+    """A plugin to check for new user input and interrupt the agent's ongoing generation."""
+
+    def __init__(self):
+        super().__init__(name="live_interrupt_plugin")
+
+    async def before_model_callback(self, *, callback_context: CallbackContext, **kwargs):
+        """
+        Check if there are any new messages in the LiveRequestQueue.
+        If so, force the agent to stop its current LLM call.
+        """
+        invocation_context = callback_context.invocation_context
+        live_request_queue = invocation_context.live_request_queue
+        
+        # Check for new messages without blocking.
+        if live_request_queue and not live_request_queue.empty():
+            print("DEBUG: New message detected. Interrupting current model call.")
+            
+            # This is the crucial step. Setting end_invocation to True tells the runner
+            # to stop the current agent's run immediately.
+            invocation_context.end_invocation = True
+            
+            # Return a quick text response to acknowledge the interruption.
+            return types.Content(parts=[types.Part(text="I'm listening.")])
+
+        # Returning None allows the original model call to proceed.
+        return None
 
 # --- Tool Definition: Client Profile ---
 def get_client_profile() -> str:
@@ -259,7 +296,6 @@ guidance_agent = Agent(
     tools=[get_citi_guidance]
 )
 
-
 # --- Root Agent: ---
 detailed_instructions = """
 You are a friendly, professional, and concise AI Wealth Advisor for Citi's wealth management clients. You are always speaking with your client, Chris Evans. If the user asks questions that are location based (e.g., weather forecast, things to do this weekend, etc.), assume they're asking for where they live unless otherwise specified. For example, Chris Evans lives in Long Beach, NY, so give him weather forecasts for Long Beach, NY.
@@ -286,3 +322,65 @@ root_agent = Agent(
    ],
    before_agent_callback=greeting_callback
 )
+
+async def run_live_agent(query: str, user_id: str, session_id: str):
+    """Runs the agent in a live, bidirectional streaming session with interruption support."""
+
+    runner = InMemoryRunner(
+        agent=root_agent,
+        plugins=[LiveInterruptPlugin()]
+    )
+
+    live_request_queue = LiveRequestQueue()
+
+    # The key change for immediate interruption is here: adjusting proactivity.
+    # We are setting a lower proactivity to prioritize listening over speaking.
+    run_config = RunConfig(
+        streaming_mode=StreamingMode.BIDI,
+        speech_config=types.SpeechConfig(
+            voice_config=types.VoiceConfig(
+                prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                    voice_name='en-US-Standard-C'
+                )
+            )
+        ),
+        response_modalities=["AUDIO", "TEXT", "VIDEO"],
+        # Adding this proactivity config to prioritize user input.
+        proactivity=types.ProactivityConfig(
+            # A lower number here will make the model more likely to be interrupted.
+            level=1.0
+        )
+    )
+
+    initial_message = types.Content(
+        role="user",
+        parts=[types.Part(text=query)]
+    )
+    live_request_queue.send_content(initial_message)
+
+    print(f"User Query: {query}")
+    print("-" * 30)
+
+    async for event in runner.run_live(
+        user_id=user_id,
+        session_id=session_id,
+        live_request_queue=live_request_queue,
+        run_config=run_config
+    ):
+        if event.content and event.content.parts:
+            for part in event.content.parts:
+                if part.text:
+                    print(f"Agent Response: {part.text}")
+                if hasattr(part, "inline_data") and part.inline_data:
+                    print("Agent is streaming audio...")
+                    
+    await runner.close()
+
+async def main():
+    # Simulate two queries to demonstrate a full turn and a new session
+    # In a live app, this would be handled by your web server or client.
+    await run_live_agent("Hello, who are you?", "user_123", "session_001")
+    await run_live_agent("What is the current market outlook?", "user_123", "session_002")
+
+if __name__ == "__main__":
+    asyncio.run(main())
