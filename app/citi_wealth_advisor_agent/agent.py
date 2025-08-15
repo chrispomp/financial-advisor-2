@@ -1,7 +1,10 @@
 import json
 from google.adk.agents import Agent
 from google.adk.tools import google_search, agent_tool
+from google.adk.agents.callback_context import CallbackContext
+from google.genai import types
 
+# --- Tool Definition: No changes here ---
 def get_client_profile() -> str:
     """
     Retrieves the detailed profile for the wealth management client, Chris Evans.
@@ -174,7 +177,37 @@ def get_client_profile() -> str:
     }
     return json.dumps(profile_data, indent=2)
 
-# 1. Define the Specialist Agent for Client Profiles
+# --- Greeting Callback: Updated with debugging and error handling ---
+def greeting_callback(callback_context: CallbackContext) -> types.Content | None:
+    """
+    Greets the user at the beginning of a session.
+    """
+    # 💡 DEBUG: This line will print all available attributes of the context object
+    # to your server log. This will tell us the correct way to access the session.
+    print(f"DEBUG: Attributes of callback_context are: {dir(callback_context)}")
+
+    try:
+        # Based on the InvocationContext class, the 'session' attribute
+        # should exist directly on the context object.
+        session = callback_context.session
+        
+        if len(session.events) == 1:
+            client_profile = json.loads(get_client_profile())
+            preferred_name = client_profile.get("preferred_name", "Chris")
+            greeting_message = f"Hello {preferred_name}, welcome. How can I help you today?"
+            return types.Content(parts=[types.Part(text=greeting_message)])
+
+    except AttributeError as e:
+        # If the 'session' attribute doesn't exist, this will prevent a crash
+        # and print a helpful message to the server log.
+        print(f"DEBUG: Could not find session attribute. Error: {e}")
+        # The greeting will be skipped, but the agent will continue to function.
+        return None
+    
+    # Returning None allows the agent to continue its normal processing on subsequent turns.
+    return None
+
+# --- Specialist Agents: No changes here ---
 profile_agent = Agent(
     name="ClientProfileAgent",
     model="gemini-2.5-flash-lite",
@@ -183,7 +216,6 @@ profile_agent = Agent(
     tools=[get_client_profile]
 )
 
-# 2. Define the Specialist Agent for Google Search
 search_agent = Agent(
     name="GoogleSearchAgent",
     model="gemini-2.5-flash-lite",
@@ -192,30 +224,27 @@ search_agent = Agent(
     tools=[google_search]
 )
 
-# 3. Define the Root Agent (Orchestrator)
-# This agent's instructions tell it HOW to use the other agents as tools.
+# --- Root Agent: No changes here ---
 detailed_instructions = """
-You are a friendly, professional, and concise AI Wealth Advisor for Citi's wealth management clients.
-You have a camera and can see the user. When asked, describe what you see. You are always talking to Chris Evans.
+You are a friendly, professional, and concise AI Wealth Advisor for Citi's wealth management clients. You are always speaking with your client, Chris Evans.
 
-**Your Primary Directive:** You have access to two specialist agents: one for client profile information and one for Google Search. Your main purpose is to delegate the user's question to the correct specialist.
+**Your Primary Directive:** Your main purpose is to answer Chris's questions by delegating them to the correct specialist agent.
 
 **Operational Logic & Tools**
-1.  **Vision for Visual Questions:** If the user asks a question about what you see (e.g., "what am I wearing?"), answer based on the video input.
-2.  **Use `ClientProfileAgent` for Client Questions:** For any questions about the client, Chris Evans, you MUST use the `ClientProfileAgent`. This includes questions about his finances, goals, family, or holdings.
+1.  **Vision for Visual Questions:** If Chris asks a question about what you see (e.g., "what am I wearing?"), answer based on the video input.
+2.  **Use `ClientProfileAgent` for Client Questions:** For any questions about Chris's finances, goals, family, or holdings, you MUST use the `ClientProfileAgent`.
 3.  **Use `GoogleSearchAgent` for Everything Else:** For all other questions, including market news, general information, or anything not related to Chris's profile, you MUST use the `GoogleSearchAgent`.
-4.  **Answer Directly:** Once you receive the information from the specialist agent, relay it to the user.
+4.  **Answer Directly:** Once you receive the information from the specialist agent, relay it clearly and concisely to Chris.
 """
 
 root_agent = Agent(
    name="citi_wealth_advisor_agent",
-   # This model is correct for the root agent, as it handles the live user interaction.
    model="gemini-live-2.5-flash-preview-native-audio",
    description="An AI agent providing client-specific information and market news for a Citi Wealth Management advisor.",
    instruction=detailed_instructions,
-   # Wrap the specialist agents using AgentTool to make them usable by the root agent.
    tools=[
        agent_tool.AgentTool(agent=profile_agent),
        agent_tool.AgentTool(agent=search_agent)
-   ]
+   ],
+   before_agent_callback=greeting_callback
 )
