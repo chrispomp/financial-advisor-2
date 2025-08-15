@@ -4,7 +4,7 @@ from google.adk.tools import google_search, agent_tool
 from google.adk.agents.callback_context import CallbackContext
 from google.genai import types
 
-# --- Tool Definition: No changes here ---
+# --- Tool Definition: ---
 def get_client_profile() -> str:
     """
     Retrieves the detailed profile for the wealth management client, Chris Evans.
@@ -24,8 +24,8 @@ def get_client_profile() -> str:
         "occupation": "Senior Director, Product Management",
         "employer": "Global Tech Firm",
         "residence": {
-          "city": "Greenwich",
-          "state": "CT",
+          "city": "Long Beach",
+          "state": "NY",
           "zip": "06830"
         },
         "family": {
