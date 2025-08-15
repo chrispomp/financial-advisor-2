@@ -58,7 +58,7 @@ def get_client_profile() -> str:
             "category": "Cash & Equivalents",
             "institution": "Citi",
             "account_type": "Citigold Checking",
-            "value": 150000
+            "value": 350000
           },
           {
             "category": "Cash & Equivalents",
