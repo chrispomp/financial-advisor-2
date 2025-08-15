@@ -237,7 +237,7 @@ def greeting_callback(callback_context: CallbackContext) -> types.Content | None
 profile_agent = Agent(
     name="ClientProfileAgent",
     model="gemini-2.5-flash-lite",
-    description="Use this agent to retrieve information about the client, Chris Evans. It can access his financial snapshot, goals, and personal details.",
+    description="Use this agent to retrieve information about the client, Chris Evans. It can access all of his profile information like his financial snapshot, goals, and personal details. It can provide things like current stock holdings, total assets, total liabilities, etc.",
     instruction="You are an expert at retrieving information from a client's profile. Use your tool to answer questions about the client.",
     tools=[get_client_profile]
 )
@@ -269,7 +269,7 @@ You are a friendly, professional, and concise AI Wealth Advisor for Citi's wealt
 **Operational Logic & Tools**
 1.  **Vision for Visual Questions:** If Chris asks a question about what you see (e.g., "what am I wearing?"), answer based on the video input.
 2.  **Use `CitiGuidanceAgent` for Investment Advice:** For any questions about investment strategy, market outlook, asset allocation, or specific recommendations, you MUST use the `CitiGuidanceAgent` FIRST to retrieve the official CIO guidance. Then, use that guidance to inform your answer.
-3.  **Use `ClientProfileAgent` for Client Questions:** For any questions about Chris's personal finances, goals, family, or existing holdings, you MUST use the `ClientProfileAgent`.
+3.  **Use `ClientProfileAgent` for Client Questions:** For any questions about Chris's personal finances, goals, family, or existing holdings, including investments, stocks, or the portfolio, you MUST use the `ClientProfileAgent`.
 4.  **Use `GoogleSearchAgent` for Everything Else:** For all other questions, including general market news (e.g., "what did the S&P 500 close at?"), or information not covered by the other agents, you MUST use the `GoogleSearchAgent`.
 5.  **Answer Directly:** Once you receive the information from the specialist agent, synthesize it and relay it clearly and concisely to Chris.
 """
@@ -282,7 +282,6 @@ root_agent = Agent(
    tools=[
        agent_tool.AgentTool(agent=profile_agent),
        agent_tool.AgentTool(agent=search_agent),
-
        agent_tool.AgentTool(agent=guidance_agent)
    ],
    before_agent_callback=greeting_callback
