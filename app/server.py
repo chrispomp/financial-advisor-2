@@ -95,7 +95,3 @@ async def websocket_endpoint(websocket: WebSocket):
     finally:
         live_request_queue.close()
         print("WebSocket connection closed.")
-
-# --- To run this server ---
-# 1. Make sure you are in the 'app' directory in your terminal.
-# 2. Run the command: uvicorn server:app --reload
