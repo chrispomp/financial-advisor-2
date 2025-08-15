@@ -95,7 +95,7 @@ Your primary purpose is to answer client questions based on the provided client 
 
 root_agent = Agent(
    name="citi_wealth_advisor_agent",
-   model="gemini-live-2.5-flash-preview-native-audio",
+   model="gemini-live-2.5-flash",
    description="An AI agent providing financial market news and information for Citi Wealth Management.",
    instruction=detailed_instructions,
    # The google_search tool is now re-enabled.
