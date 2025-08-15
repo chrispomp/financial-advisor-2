@@ -82,7 +82,7 @@ def get_client_profile() -> str:
 profile_agent = Agent(
     name="ClientProfileAgent",
     # 💡 FIX: Use a standard model for internal tool calls
-    model="gemini-2.5-flash",
+    model="gemini-2.5-flash-lite",
     description="Use this agent to retrieve information about the client, Chris Evans. It can access his financial snapshot, goals, and personal details.",
     instruction="You are an expert at retrieving information from a client's profile. Use your tool to answer questions about the client.",
     tools=[get_client_profile]
@@ -92,7 +92,7 @@ profile_agent = Agent(
 search_agent = Agent(
     name="GoogleSearchAgent",
     # 💡 FIX: Use a standard model for internal tool calls
-    model="gemini-2.5-flash",
+    model="gemini-2.5-flash-lite",
     description="Use this agent for all general knowledge questions, such as current events, market news, or any information not found in the client's profile.",
     instruction="You are an expert researcher. You answer questions by searching the internet.",
     tools=[google_search]
