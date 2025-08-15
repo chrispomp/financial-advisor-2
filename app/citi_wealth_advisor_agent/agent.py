@@ -341,14 +341,14 @@ async def run_live_agent(query: str, user_id: str, session_id: str):
         speech_config=types.SpeechConfig(
             voice_config=types.VoiceConfig(
                 prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                    voice_name='en-US-Standard-C'
+                    voice_name='en-US-Standard-H'
                 )
             )
         ),
         response_modalities=["AUDIO", "TEXT", "VIDEO"],
         # A lower number here will make the model more likely to be interrupted.
         proactivity=types.ProactivityConfig(
-            level=0.5
+            level=0.2
         )
     )
 
