@@ -4,7 +4,7 @@ from google.adk.tools import google_search, agent_tool
 from google.adk.agents.callback_context import CallbackContext
 from google.genai import types
 
-# --- Tool Definition: ---
+# --- Tool Definition: Client Profile ---
 def get_client_profile() -> str:
     """
     Retrieves the detailed profile for the wealth management client, Chris Evans.
@@ -177,37 +177,63 @@ def get_client_profile() -> str:
     }
     return json.dumps(profile_data, indent=2)
 
-# --- Greeting Callback: Updated with debugging and error handling ---
+# --- ✨ NEW Tool Definition: Citi Guidance ---
+def get_citi_guidance() -> str:
+    """
+    Retrieves the official investment strategy and market outlook from Citi's Chief Investment Officer (CIO).
+    This information should be used as the basis for all investment recommendations and market commentary.
+    """
+    guidance = {
+        "cio_outlook_summary": "We maintain a moderately constructive outlook on global markets, balancing resilient economic growth against persistent inflationary pressures and geopolitical risks. We advocate for a strategy of quality and diversification, focusing on companies with strong balance sheets and durable earnings power. We are neutral on equities and moderately overweight fixed income, with a preference for high-quality corporate and municipal bonds. Alternative investments play a key role for diversification.",
+        "date_of_guidance": "2025-08-12",
+        "strategic_asset_allocation_moderate_risk": {
+            "equities": {
+                "total_allocation": "55%",
+                "us_large_cap": "30%",
+                "us_smid_cap": "5%",
+                "international_developed": "15%",
+                "emerging_markets": "5%"
+            },
+            "fixed_income": {
+                "total_allocation": "35%",
+                "investment_grade_corporate": "20%",
+                "us_treasuries": "10%",
+                "high_yield": "5%"
+            },
+            "alternatives": {
+                "total_allocation": "10%",
+                "notes": "Includes real estate, private credit, and commodities for inflation hedging and diversification."
+            },
+            "cash_and_equivalents": "0-5% (Tactical)"
+        },
+        "key_themes": [
+            "Quality Over Growth: Prioritize companies with proven profitability and low debt.",
+            "Yield is Back: Take advantage of attractive yields in high-quality fixed income.",
+            "Diversify Globally: US market leadership may narrow; opportunities exist in international developed markets.",
+            "Hedge Inflation: Real assets and alternative investments can provide a buffer against persistent inflation."
+        ],
+        "disclaimer": "This guidance is for informational purposes only and does not constitute a personalized investment recommendation. All investment decisions should be made in consultation with a qualified financial advisor based on the client's individual circumstances and risk tolerance."
+    }
+    return json.dumps(guidance, indent=2)
+
+# --- Greeting Callback: ---
 def greeting_callback(callback_context: CallbackContext) -> types.Content | None:
     """
     Greets the user at the beginning of a session.
     """
-    # 💡 DEBUG: This line will print all available attributes of the context object
-    # to your server log. This will tell us the correct way to access the session.
-    print(f"DEBUG: Attributes of callback_context are: {dir(callback_context)}")
-
     try:
-        # Based on the InvocationContext class, the 'session' attribute
-        # should exist directly on the context object.
         session = callback_context.session
-        
         if len(session.events) == 1:
             client_profile = json.loads(get_client_profile())
             preferred_name = client_profile.get("preferred_name", "Chris")
             greeting_message = f"Hello {preferred_name}, welcome. How can I help you today?"
             return types.Content(parts=[types.Part(text=greeting_message)])
-
     except AttributeError as e:
-        # If the 'session' attribute doesn't exist, this will prevent a crash
-        # and print a helpful message to the server log.
         print(f"DEBUG: Could not find session attribute. Error: {e}")
-        # The greeting will be skipped, but the agent will continue to function.
         return None
-    
-    # Returning None allows the agent to continue its normal processing on subsequent turns.
     return None
 
-# --- Specialist Agents: No changes here ---
+# --- Specialist Agents: ---
 profile_agent = Agent(
     name="ClientProfileAgent",
     model="gemini-2.5-flash-lite",
@@ -224,17 +250,28 @@ search_agent = Agent(
     tools=[google_search]
 )
 
-# --- Root Agent: No changes here ---
+# --- ✨ NEW Specialist Agent: Citi Guidance ---
+guidance_agent = Agent(
+    name="CitiGuidanceAgent",
+    model="gemini-2.5-flash-lite",
+    description="Use this agent to get the official investment strategy and market outlook from Citi's Chief Investment Officer (CIO).",
+    instruction="You are an expert at retrieving and presenting official investment guidance. Use your tool to provide the current CIO outlook.",
+    tools=[get_citi_guidance]
+)
+
+
+# --- Root Agent: Updated Instructions ---
 detailed_instructions = """
 You are a friendly, professional, and concise AI Wealth Advisor for Citi's wealth management clients. You are always speaking with your client, Chris Evans.
 
-**Your Primary Directive:** Your main purpose is to answer Chris's questions by delegating them to the correct specialist agent.
+**Your Primary Directive:** Your main purpose is to answer Chris's questions by delegating them to the correct specialist agent. You must follow the operational logic below precisely.
 
 **Operational Logic & Tools**
 1.  **Vision for Visual Questions:** If Chris asks a question about what you see (e.g., "what am I wearing?"), answer based on the video input.
-2.  **Use `ClientProfileAgent` for Client Questions:** For any questions about Chris's finances, goals, family, or holdings, you MUST use the `ClientProfileAgent`.
-3.  **Use `GoogleSearchAgent` for Everything Else:** For all other questions, including market news, general information, or anything not related to Chris's profile, you MUST use the `GoogleSearchAgent`.
-4.  **Answer Directly:** Once you receive the information from the specialist agent, relay it clearly and concisely to Chris.
+2.  **Use `CitiGuidanceAgent` for Investment Advice:** For any questions about investment strategy, market outlook, asset allocation, or specific recommendations, you MUST use the `CitiGuidanceAgent` FIRST to retrieve the official CIO guidance. Then, use that guidance to inform your answer.
+3.  **Use `ClientProfileAgent` for Client Questions:** For any questions about Chris's personal finances, goals, family, or existing holdings, you MUST use the `ClientProfileAgent`.
+4.  **Use `GoogleSearchAgent` for Everything Else:** For all other questions, including general market news (e.g., "what did the S&P 500 close at?"), or information not covered by the other agents, you MUST use the `GoogleSearchAgent`.
+5.  **Answer Directly:** Once you receive the information from the specialist agent, synthesize it and relay it clearly and concisely to Chris.
 """
 
 root_agent = Agent(
@@ -244,7 +281,9 @@ root_agent = Agent(
    instruction=detailed_instructions,
    tools=[
        agent_tool.AgentTool(agent=profile_agent),
-       agent_tool.AgentTool(agent=search_agent)
+       agent_tool.AgentTool(agent=search_agent),
+       # ✨ NEW tool added to the root agent
+       agent_tool.AgentTool(agent=guidance_agent)
    ],
    before_agent_callback=greeting_callback
 )
