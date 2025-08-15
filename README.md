@@ -109,3 +109,8 @@ python3 deployment/deploy.py --delete
 
 model="gemini-live-2.5-flash-preview-native-audio",
 
+source .venv/bin/activate
+
+cd app
+
+adk web
