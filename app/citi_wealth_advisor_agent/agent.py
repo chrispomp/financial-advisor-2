@@ -26,7 +26,7 @@ def get_client_profile() -> str:
         "residence": {
           "city": "Long Beach",
           "state": "NY",
-          "zip": "06830"
+          "zip": "11561"
         },
         "family": {
           "marital_status": "Married",
@@ -168,7 +168,7 @@ def get_client_profile() -> str:
         "client_since": 2015,
         "actionable_opportunities": [
           {"area": "Consolidation", "action": "Propose plan to move competitor-held Money Market fund to Citi."},
-          {"area": "Education Planning", "action": "Schedule meeting to discuss benefits and funding of 529 College Savings Plans."},
+          {"area": "Education Planning", "action": "Discuss benefits and funding of 529 College Savings Plans."},
           {"area": "Concentrated Stock", "action": "Present options for hedging or systematically selling vested company stock."},
           {"area": "Credit & Lending", "action": "Introduce mortgage specialists to review refinancing options."},
           {"area": "Estate Planning", "action": "Schedule introduction with a Trust & Estate specialist."}
@@ -177,7 +177,7 @@ def get_client_profile() -> str:
     }
     return json.dumps(profile_data, indent=2)
 
-# --- ✨ NEW Tool Definition: Citi Guidance ---
+# --- Tool Definition: Citi Guidance ---
 def get_citi_guidance() -> str:
     """
     Retrieves the official investment strategy and market outlook from Citi's Chief Investment Officer (CIO).
@@ -250,7 +250,7 @@ search_agent = Agent(
     tools=[google_search]
 )
 
-# --- ✨ NEW Specialist Agent: Citi Guidance ---
+# --- Specialist Agent: Citi Guidance ---
 guidance_agent = Agent(
     name="CitiGuidanceAgent",
     model="gemini-2.5-flash-lite",
@@ -260,7 +260,7 @@ guidance_agent = Agent(
 )
 
 
-# --- Root Agent: Updated Instructions ---
+# --- Root Agent: ---
 detailed_instructions = """
 You are a friendly, professional, and concise AI Wealth Advisor for Citi's wealth management clients. You are always speaking with your client, Chris Evans.
 
@@ -282,7 +282,7 @@ root_agent = Agent(
    tools=[
        agent_tool.AgentTool(agent=profile_agent),
        agent_tool.AgentTool(agent=search_agent),
-       # ✨ NEW tool added to the root agent
+
        agent_tool.AgentTool(agent=guidance_agent)
    ],
    before_agent_callback=greeting_callback
