@@ -106,3 +106,5 @@ python3 deployment/deploy.py --update
 # To delete your agent
 python3 deployment/deploy.py --delete
 ```
+
+model="gemini-live-2.5-flash-preview-native-audio",
