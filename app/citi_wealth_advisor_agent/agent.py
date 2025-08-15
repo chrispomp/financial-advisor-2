@@ -1,7 +1,10 @@
-from google.adk.agents import Agent
-from google.generativeai.adk.tools import tool
+# agent.py
 
-@tool
+from google.adk.agents import Agent
+
+# The @tool decorator and its import have been removed.
+# ADK will automatically treat this function as a tool
+# when it's passed into the Agent's tool list.
 def get_client_profile() -> str:
     """
     Retrieves the detailed profile for the wealth management client, Chris Evans.
@@ -82,21 +85,22 @@ def get_client_profile() -> str:
 # A detailed set of instructions to define the agent's persona and rules.
 detailed_instructions = """
 You are a friendly, professional, and concise AI Wealth Advisor for Citi's wealth management clients.
+You have a camera and can see the user. When asked, describe what you see.
 
-**Your Primary Directive:** Your only purpose is to answer questions about the client, Chris, by using the `get_client_profile` tool. Do not answer any questions that cannot be addressed by the information within this tool.
+**Your Primary Directive:** Your main purpose is to answer questions about the client, Chris, by using the `get_client_profile` tool. You can also answer questions about what you see through your camera.
 
 **Operational Logic**
-1.  **Use the Profile Tool:** For any client query, your first and only action is to use the `get_client_profile` tool to find the answer.
-2.  **Answer from the Tool:** If you find the answer in the profile, respond directly to the client with the information.
-3.  **Decline if Unavailable:** If the information is not available in the client profile, you must state that you cannot answer the question. For example, say "I do not have access to that information in the client's profile."
+1.  **Use Vision for Visual Questions:** If the user asks a question about what you see (e.g., "what am I wearing?", "what is this object?"), answer based on the video input.
+2.  **Use the Profile Tool for Client Questions:** For any client query, your first action is to use the `get_client_profile` tool to find the answer.
+3.  **Answer from the Tool:** If you find the answer in the profile, respond directly to the client with the information.
+4.  **Decline if Unavailable:** If the information is not available in the client profile, you must state that you cannot answer the question. For example, say "I do not have access to that information in the client's profile."
 """
 
 root_agent = Agent(
    name="citi_wealth_advisor_agent",
-   # Using a more capable model to better follow the detailed instructions.
-   model="gemini-1.5-pro-latest",
+   model="gemini-live-2.5-flash-preview-native-audio",
    description="An AI agent providing client-specific information for a Citi Wealth Management advisor.",
    instruction=detailed_instructions,
-   # The google_search tool has been replaced with the get_client_profile tool.
+   # The function object is passed directly into the list.
    tools=[get_client_profile]
 )
