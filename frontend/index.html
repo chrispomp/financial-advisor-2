@@ -52,6 +52,16 @@
         ui.startStopBtn.addEventListener('click', () => state.isConversationActive ? endConversation() : startConversation());
         ui.muteBtn.addEventListener('click', toggleMute);
 
+        function arrayBufferToBase64(buffer) {
+            let binary = '';
+            const bytes = new Uint8Array(buffer);
+            const len = bytes.byteLength;
+            for (let i = 0; i < len; i++) {
+                binary += String.fromCharCode(bytes[i]);
+            }
+            return window.btoa(binary);
+        }
+
         async function startConversation() {
             try {
                 const session = await createAgentSession();
@@ -84,13 +94,21 @@
 
         function connectToAgent(sessionId, stream) {
             return new Promise(async (resolve, reject) => {
-                state.socket = new WebSocket(`ws://localhost:8000/run_live?app_name=citi_wealth_advisor_agent&user_id=user&session_id=${sessionId}`);
+                state.socket = new WebSocket('ws://localhost:8000/ws/');
                 state.socket.binaryType = "arraybuffer";
 
                 state.socket.onopen = async () => {
-                    console.log("✅ WebSocket connected. Initializing audio processor.");
+                    console.log("✅ WebSocket connection opened. Sending handshake.");
+                    // ADK Handshake: send connection details
+                    state.socket.send(JSON.stringify({
+                        app_name: 'citi_wealth_advisor_agent',
+                        user_id: 'user',
+                        session_id: sessionId
+                    }));
+
                     ui.statusText.textContent = 'Connected';
                     ui.statusDot.classList.add('connected');
+
                     try {
                         state.audioContext = new AudioContext({ sampleRate: 16000 });
                         await state.audioContext.audioWorklet.addModule('audio-processor.js');
@@ -98,24 +116,54 @@
                         state.audioContext.createMediaStreamSource(stream).connect(state.audioProcessor);
 
                         state.audioProcessor.port.onmessage = event => {
-                            if (state.socket.readyState === WebSocket.OPEN) state.socket.send(event.data);
+                            if (state.socket.readyState === WebSocket.OPEN) {
+                                const base64Audio = arrayBufferToBase64(event.data);
+                                state.socket.send(JSON.stringify({ audio_in: base64Audio }));
+                            }
                         };
                         resolve();
                     } catch (e) { reject(e); }
                 };
 
                 state.socket.onmessage = async event => {
-                    if (event.data instanceof ArrayBuffer) {
+                    // All messages from ADK are JSON strings
+                    const message = JSON.parse(event.data);
+
+                    if (message.media_format) {
+                        const sampleRate = message.media_format.audio.sample_rate_hz;
+                        console.log(`🎤 Server specified audio format with sample rate: ${sampleRate}Hz`);
+                        if (state.audioContextPlayback) {
+                           await state.audioContextPlayback.close();
+                        }
+                        state.audioContextPlayback = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: sampleRate });
+                    }
+
+                    if (message.audio_out) {
                         if (!state.audioContextPlayback) {
-                            state.audioContextPlayback = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
+                            console.warn("Received audio data before media format was specified. Ignoring.");
+                            return;
                         }
                         try {
-                            const audioBuffer = await state.audioContextPlayback.decodeAudioData(event.data);
+                            // Decode Base64 audio data to ArrayBuffer
+                            const binaryString = window.atob(message.audio_out);
+                            const len = binaryString.length;
+                            const bytes = new Uint8Array(len);
+                            for (let i = 0; i < len; i++) {
+                                bytes[i] = binaryString.charCodeAt(i);
+                            }
+
+                            const audioBuffer = await state.audioContextPlayback.decodeAudioData(bytes.buffer);
                             const source = state.audioContextPlayback.createBufferSource();
                             source.buffer = audioBuffer;
                             source.connect(state.audioContextPlayback.destination);
                             source.start();
-                        } catch (e) { console.error("Error playing audio chunk:", e); }
+                        } catch (e) {
+                            console.error("Error decoding or playing audio chunk:", e);
+                        }
+                    }
+
+                    if (message.text) {
+                        console.log("Agent:", message.text);
                     }
                 };
                 state.socket.onerror = (err) => { console.error("❌ WebSocket Error:", err); reject(err); };
