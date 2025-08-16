@@ -32,13 +32,18 @@ def get_client_profile() -> str:
       "client_name": "Christopher M. Evans",
       "preferred_name": "Chris",
       "personal_info": {
+        "age": 45,
         "residence": {"city": "Long Beach", "state": "NY"},
-        "family": {"dependents": [{"name": "Sophia"}, {"name": "Liam"}]},
-        "personal_interests": ["technology", "reading", "music"],
+        "family": {"dependents": [{"name": "Sophia", "age": 16}, {"name": "Liam", "age": 13}]},
+        "personal_interests": ["New York Jets", "technology", "skiing"],
         "preferences": {
-            "favorite_football_team": "New York Jets",
-            "favorite_food": "Taco Bell"
+            "favorite_food": ["Mexican", "Sushi", "Burgers"]
         }
+      },
+      "investment_profile": {
+          "risk_tolerance": "Moderate Growth",
+          "investment_horizon": "Long-term (15+ years)",
+          "primary_goals": ["Retirement Planning", "Education Funding for children"]
       }
     }
     return json.dumps(profile_data, indent=2)
@@ -60,84 +65,17 @@ def get_client_portfolio() -> str:
 
 def get_citi_product_catalog() -> str:
     """Retrieves Citi's catalog of featured products and services."""
-    products = {
-        "products": [
-            {
-                "product_name": "Citi Strata Elite Card",
-                "category": "Credit Card",
-                "features": "Flagship lifestyle card. 10x points on hotels, car rentals, and attractions booked through CitiTravel.com. 3x points on airlines, dining, and supermarkets. $300 annual travel credit. Global Entry/TSA PreCheck credit.",
-                "ideal_for": ["premium lifestyle spender", "maximizing travel points", "values simplicity and high rewards"]
-            },
-            {
-                "product_name": "Citi® / AAdvantage® Executive World Elite Mastercard®",
-                "category": "Credit Card",
-                "features": "Admirals Club membership, first checked bag free, priority boarding on American Airlines, high AAdvantage mile earn rate.",
-                "ideal_for": ["frequent American Airlines flyer", "seeks elite airline status", "values airport lounge access"]
-            }
-        ]
-    }
-    return json.dumps(products, indent=2)
-
+    return json.dumps({"products": [{"product_name": "Citi Strata Elite Card", "category": "Credit Card"}]})
 
 def get_citi_guidance() -> str:
-    """
-    Retrieves the official investment strategy, market outlook, and recommendations
-    from Citi's Chief Investment Officer (CIO). This is a comprehensive guide for
-    wealth management clients.
-    """
+    """Retrieves the official investment strategy and market outlook from Citi's CIO."""
     guidance = {
-        "guidance_date": "2025-08-15",
-        "cio_message_summary": "We are navigating a complex global market. While economic growth remains resilient, inflationary pressures and geopolitical tensions require a disciplined and diversified approach. We believe the current environment favors quality over speculation. Our strategy is focused on identifying durable, long-term opportunities while managing downside risk. We see potential in high-quality fixed income, which now offers attractive yields, and select global equities with strong fundamentals.",
-        "market_outlook": "Neutral to Cautiously Optimistic",
-        "strategic_asset_allocation_moderate_growth": {
-            "equities": {
-                "total": "55%",
-                "us_large_cap": "30%",
-                "us_smid_cap": "5%",
-                "international_developed": "15%",
-                "emerging_markets": "5%"
-            },
-            "fixed_income": {
-                "total": "35%",
-                "investment_grade_corporate": "20%",
-                "us_treasuries_munis": "10%",
-                "high_yield_other": "5%"
-            },
-            "alternatives": {"total": "5%", "description": "e.g., Real Estate, Private Credit"},
-            "cash_and_equivalents": {"total": "5%", "description": "For liquidity and tactical opportunities"}
-        },
-        "tactical_outlook_tilts_3_to_6_months": {
-            "us_equities": "Neutral",
-            "international_equities": "Slightly Overweight",
-            "investment_grade_bonds": "Overweight",
-            "high_yield_bonds": "Underweight",
-            "commodities": "Neutral"
-        },
-        "key_investment_themes": [
-            {
-                "theme": "Focus on Quality",
-                "rationale": "In an environment of moderating growth, we prefer companies with strong balance sheets, consistent earnings, and competitive advantages (a 'moat'). These companies are better positioned to weather economic uncertainty than more speculative, high-growth stocks."
-            },
-            {
-                "theme": "The Return of Yield",
-                "rationale": "After years of low interest rates, high-quality fixed income now offers compelling yields. We believe investment-grade corporate and municipal bonds provide an attractive source of income and a valuable diversifier to equity risk."
-            },
-            {
-                "theme": "Go Global for Growth",
-                "rationale": "While the US market remains central, valuations in some international developed and emerging markets are more attractive. Diversifying globally can capture different economic cycles and opportunities, particularly in regions benefiting from long-term secular growth trends."
-            }
-        ],
-        "actionable_recommendations": [
-            "Review your portfolio's fixed-income allocation to ensure you are capturing current yield opportunities.",
-            "Consider rebalancing from highly concentrated, speculative growth stocks towards a basket of quality, blue-chip global equities.",
-            "For long-term goals like education, ensure you are adequately diversified beyond just US stocks."
-        ],
-        "disclaimer": "This information is for general informational purposes only and is not intended to be personal investment advice. All investment decisions should be made with a qualified financial advisor."
+        "cio_message_summary": "We are navigating a complex global market, favoring quality and diversification. We see potential in high-quality fixed income and select global equities.",
+        "key_investment_themes": ["Focus on Quality", "The Return of Yield", "Go Global for Growth"]
     }
     return json.dumps(guidance, indent=2)
 
 # --- Consolidated Callback ---
-
 def initialize_and_greet(callback_context: CallbackContext) -> types.Content | None:
     """Loads client context at the start of the turn and greets the user on the first turn."""
     try:
@@ -149,7 +87,13 @@ def initialize_and_greet(callback_context: CallbackContext) -> types.Content | N
 
         if callback_context.session and len(callback_context.session.events) == 1:
             preferred_name = full_context.get("preferred_name", "there")
-            return types.Content(parts=[types.Part(text=f"Hello {preferred_name}, welcome back. How can I help?")])
+            # --- ADDED: Proactive, personalized greeting ---
+            interests = full_context.get("personal_info", {}).get("personal_interests", [])
+            greeting = f"Hello {preferred_name}, welcome back. "
+            if "New York Jets" in interests:
+                 greeting += "Hope you're looking forward to the Jets game this weekend. "
+            greeting += "How can I help you today?"
+            return types.Content(parts=[types.Part(text=greeting)])
     except Exception as e:
         print(f"DEBUG: Error in callback: {e}")
     return None
@@ -163,30 +107,28 @@ search_agent = Agent(name="GoogleSearchAgent", model="gemini-2.5-flash-lite", de
 
 # --- Root Agent ---
 detailed_instructions = """
-You are an elite AI Wealth Advisor from Citi, a trusted, hyper-personalized partner to your client, Chris Evans. Your persona is friendly, professional, and exceptionally proactive.
+You are an elite AI Wealth Advisor from Citi, a trusted, hyper-personalized partner to your client, Chris Evans.
 
-**Strict Operational Plan:**
-You MUST follow these steps in order for every query:
-1.  **Vision First:** If the user asks a question about what you see (e.g., "what am I wearing?"), you MUST answer based on the visual input from the camera.
-2.  **Analyze & Check Context:** For all other questions, understand the user's intent. Immediately check the pre-loaded `client_context` to see if the answer is already there. For personal questions like "what's my favorite food?", the answer MUST come from the `preferences` section of the context. For location-based queries (e.g., weather), you MUST use the city/state from the context.
-3.  **Formulate a Plan:** If the answer is not in the context, determine the sequence of tools needed.
-4.  **Execute & Synthesize:** Call the specialist agents in order, passing information between them as necessary, and synthesize the final result into a single, insightful response.
+**Core Directives & Operational Plan:**
+You MUST follow these rules in order:
+1.  **Hyper-Personalize (CRITICAL):** You MUST use the `personal_info` and `investment_profile` from the `client_context` to make the conversation feel personal. Reference their interests, preferences, goals, and risk tolerance.
+2.  **Location Mandate:** For ANY location-sensitive query (e.g., "things to do," "restaurants"), you MUST use the client's residence from the context in your tool call.
+3.  **Vision First:** If asked about what you see, answer based on the visual input.
+4.  **Check Context First:** For all other questions, check the pre-loaded `client_context` first.
+5.  **Formulate a Plan & Execute:** If the answer is not in the context, determine the tool sequence, execute the calls, and synthesize the results into a single, insightful response.
 
-**Crucial Example 1: Daily Briefing**
--   **User Query:** "Give me my daily briefing."
+**Crucial Example 1: Personalized Recommendation**
+-   **User Query:** "Any good restaurants around here?"
 -   **Your Thought Process:**
-    1.  "This is a request for a structured financial summary. I must follow a specific sequence."
-    2.  "Step 1: Get a general market update. I will call `GoogleSearchAgent` with a query like 'today's financial market news summary'."
-    3.  "Step 2: Get my client's specific holdings. The tickers are in the pre-loaded `client_context`. I see AAPL, MSFT, and GOOGL."
-    4.  "Step 3: Get the performance of those holdings. I will call `GoogleSearchAgent` again with the query 'AAPL, MSFT, GOOGL stock performance'."
-    5.  "Step 4: Check for recent portfolio activity. The `client_context` contains a `recent_activity` field. I see a large cash deposit of $800,000."
-    6.  "Step 5: Synthesize all this information. I will start with the market overview, then the personal portfolio performance, and conclude by proactively addressing the large cash deposit with a recommendation based on Citi's guidance."
+    1.  "This is a location-based, personal question. I must use both critical directives."
+    2.  "Step 1: Check `client_context`. Residence is 'Long Beach, NY'. Favorite food is 'Mexican'."
+    3.  "Step 2: My plan is to call `GoogleSearchAgent`."
+    4.  "Step 3: I will execute the call with the query 'best Mexican restaurants in Long Beach NY'."
+    5.  "Step 4: I will synthesize the results and respond, 'Since you enjoy Mexican food, you might like...'"
 
-**Crucial Example 2: Personalized Portfolio Performance**
--   **User Query:** "How did my stocks perform this week?"
--   **Your Thought Process:**
-    1.  "This requires a multi-step plan. I'll get the stock tickers from the `client_context` and then use `GoogleSearchAgent` to find their performance for the week."
-    2.  "I will synthesize the search results into a concise summary for the client."
+**Crucial Example 2: Personalized Advice**
+-   **User Query:** "What should I do with the extra cash in my account?"
+-   **Your Thought Process:** "This requires personalized financial advice. I'll check the client's `investment_profile` for their goals and risk tolerance, then call `CitiGuidanceAgent` to get the bank's official strategy, and finally synthesize the two into a tailored recommendation."
 """
 
 root_agent = Agent(
@@ -234,14 +176,13 @@ async def run_live_agent(query: str, user_id: str, session_id: str, voice_name: 
 
 async def main():
     """Main function to run agent examples."""
-    print("--- 1. Testing Daily Briefing ---")
-    await run_live_agent("Give me my daily briefing.", "user_123", "session_001")
+    print("--- 1. Testing Personalized Restaurant Recommendation ---")
+    await run_live_agent("I'm hungry. Any ideas for dinner?", "user_123", "session_001")
 
     print("\n\n" + "="*50 + "\n\n")
-    
-    print("--- 2. Testing Personal Preference Question ---")
-    await run_live_agent("What is my favorite sports team?", "user_123", "session_002", voice_name='en-US-Standard-J')
 
+    print("--- 2. Testing Personal Interest Knowledge ---")
+    await run_live_agent("What's my favorite football team?", "user_123", "session_002", voice_name='en-US-Standard-J')
 
 if __name__ == "__main__":
     asyncio.run(main())
