@@ -1,116 +1,74 @@
-## Setup and Installation
+AI Wealth Advisor Agent
+This project implements a sophisticated AI Wealth Advisor agent for Citi, built using the Google Agent Development Kit (ADK). The agent is designed to be a hyper-personalized partner for clients, providing instant access to their profile, portfolio, and relevant financial guidance in a live, interactive conversation.
 
-1.  **Prerequisites**
+It uses a hierarchical structure, with a central "Root Agent" that delegates tasks to specialized agents for handling specific domains like client profiles, portfolios, product recommendations, and real-time market data via Google Search.
 
-    *   Python 3.11+
-    *   Poetry
-        *   For dependency management and packaging. Please follow the
-            instructions on the official
-            [Poetry website](https://python-poetry.org/docs/) for installation.
+✨ Features
+Hierarchical Agent System: A root agent orchestrates multiple specialist agents for modular and efficient task handling.
 
-        ```bash
-        pip install poetry
-        ```
+Context Pre-loading: Client profile and portfolio data are pre-loaded at the start of each turn for immediate access and reduced latency.
 
-    * A project on Google Cloud Platform
-    * Google Cloud CLI
-        *   For installation, please follow the instruction on the official
-            [Google Cloud website](https://cloud.google.com/sdk/docs/install).
+Live Interruptibility: A custom plugin allows the agent to be interrupted mid-task if new user input is detected, creating a highly responsive and natural conversational experience.
 
-2.  **Installation**
+Multi-modal Responses: Capable of streaming responses that include text and audio.
 
-    ```bash
-    # Clone this repository.
-    git clone https://github.com/google/adk-samples.git
-    cd adk-samples/python/agents/financial_advisor
-    # Install the package and dependencies.
-    poetry install
-    ```
+Consolidated Knowledge Base: Integrates static client data with real-time information from Google Search and official Citi guidance.
 
-3.  **Configuration**
+🛠️ Setup and Installation
+Prerequisites
+Python 3.8+
 
-    *   Set up Google Cloud credentials.
+Access to Google AI services and a configured Google Cloud project.
 
-        *   You may set the following environment variables in your shell, or in
-            a `.env` file instead.
+1. Clone the Repository
+First, clone this repository to your local machine.
 
-        ```bash
-        export GOOGLE_GENAI_USE_VERTEXAI=true
-        export GOOGLE_CLOUD_PROJECT=fsi-banking-agentspace
-        export GOOGLE_CLOUD_LOCATION=us-central1
-        export GOOGLE_CLOUD_STORAGE_BUCKET=fsi-banking-agentspace-adk-staging
-        ```
+git clone <your-repository-url>
+cd <your-repository-directory>
 
-    *   Authenticate your GCloud account.
+2. Install Dependencies
+Install the necessary Python libraries using pip. The primary dependency is the Google Agent Development Kit.
 
-        ```bash
-        gcloud auth application-default login
-        gcloud auth application-default set-quota-project $GOOGLE_CLOUD_PROJECT
-        ```
+pip install google-adk
 
-## Running the Agent
+3. Authentication
+To run the agent, you need to be authenticated with Google Cloud. Run the following command and follow the instructions to log in:
 
-**Using `adk`**
+gcloud auth application-default login
 
-ADK provides convenient ways to bring up agents locally and interact with them.
-You may talk to the agent using the CLI:
+🚀 Running the Agent
+Execute the main Python script from your terminal to start the agent. The script will run predefined queries to demonstrate the agent's capabilities.
 
-```bash
-adk run financial_advisor
-```
+python your_agent_script_name.py
 
-Or on a web interface:
+You will see output in the console as the agent processes the hardcoded queries, greets the client, and answers questions based on the pre-loaded context.
 
-```bash
- adk web
-```
+Example Output:
+--- 1. Testing Knowledge of Age ---
+User Query: 'How old am I?' (Voice: Aoede)
+------------------------------
+Agent Response: Hello Chris, you are 45 years old.
 
-## Deployment
+==================================================
 
-The Financial Advisor can be deployed to Vertex AI Agent Engine using the following
-commands:
+--- 2. Testing Personal Interest Knowledge ---
+User Query: 'What's my favorite football team?' (Voice: en-US-Standard-J)
+------------------------------
+Agent Response: Your favorite football team is the New York Jets.
 
-```bash
-poetry install --with deployment
-python3 deployment/deploy.py --create
-```
+⚙️ How It Works
+Initialization: When main() is executed, it calls run_live_agent.
 
-When the deployment finishes, it will print a line like this:
+Context Loading: The preload_client_context callback is triggered. It calls the mock data functions (get_client_profile, get_client_portfolio) and loads the combined data into the agent's memory (invocation_context).
 
-```
-Created remote agent: projects/<PROJECT_NUMBER>/locations/<PROJECT_LOCATION>/reasoningEngines/<AGENT_ENGINE_ID>
-```
+Query Processing: The Root Agent receives the user's query. Its core instructions mandate that it must check the client_context first before using any tools.
 
-If you forgot the AGENT_ENGINE_ID, you can list existing agents using:
+Task Delegation:
 
-```bash
-python3 deployment/deploy.py --list
-```
+If the answer is in the context (e.g., "How old am I?"), the agent synthesizes a response directly.
 
-The output will be like:
+If the query requires information not in the context (e.g., "latest news about MSFT"), the Root Agent delegates the task to the appropriate specialist agent (in this case, GoogleSearchAgent).
 
-```
-All remote agents:
+Live Interruption: Throughout the process, the LiveInterruptPlugin continuously checks a request queue for new user messages. If a new message arrives, it sets an end_invocation flag, gracefully stopping the agent's current action to immediately address the new input.
 
-123456789 ("financial_advisor")
-- Create time: 2025-05-12 12:35:34.245431+00:00
-- Update time: 2025-05-12 12:36:01.421432+00:00
-```
-
-To delete the deployed agent, you may run the following command:
-
-```bash
-# To update your agent
-python3 deployment/deploy.py --update
-
-# To delete your agent
-python3 deployment/deploy.py --delete
-```
-
-model="gemini-live-2.5-flash-preview-native-audio",
-
-source .venv/bin/activate
-
-cd app
-
-adk web
+Response Streaming: The final response is streamed back to the user in the specified modalities (text and audio).
