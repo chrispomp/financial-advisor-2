@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Citi AI Wealth Advisor</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        /* --- Branding and Style Guidelines --- */
+        :root {
+            --primary-blue: #003B70;
+            --primary-red: #D9261C;
+            --neutral-bg: #FFFFFF;
+            --neutral-light-gray: #F0F2F5;
+            --text-dark-gray: #333333;
+            --font-family: 'Helvetica Neue', Arial, sans-serif;
+        }
+
+        /* --- Overall Layout & Mobile Container --- */
+        body {
+            background-color: var(--neutral-light-gray);
+            font-family: var(--font-family);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            box-sizing: border-box;
+        }
+
+        .mobile-container {
+            width: 100%;
+            max-width: 400px;
+            height: 80vh;
+            max-height: 700px;
+            background-color: var(--neutral-bg);
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* --- Header with Logo --- */
+        header {
+            padding: 15px 20px;
+            background-color: var(--primary-blue);
+            text-align: center;
+        }
+
+        header img {
+            height: 30px;
+            width: auto;
+        }
+        
+        /* --- Main Content Area: Video and Controls --- */
+        main {
+            flex-grow: 1;
+            position: relative;
+            background-color: #000;
+        }
+
+        #video-feed {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+        
+        .placeholder {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            color: #ccc;
+            background-color: #2c2c2c;
+        }
+
+        .placeholder i {
+            font-size: 80px;
+            margin-bottom: 20px;
+        }
+
+        .controls {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 20px;
+            background: linear-gradient(to top, rgba(0,0,0,0.7), transparent);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .control-button {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            border: none;
+            cursor: pointer;
+            font-size: 24px;
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: background-color 0.2s;
+        }
+
+        #startStopBtn {
+            background-color: var(--primary-blue);
+        }
+        
+        #startStopBtn.active {
+            background-color: var(--primary-red);
+        }
+
+        #muteBtn {
+            background-color: rgba(255, 255, 255, 0.3);
+        }
+
+        #muteBtn:disabled {
+            background-color: rgba(255, 255, 255, 0.1);
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="mobile-container">
+        <header>
+            <img src="https://www.citi.com/mobile-apps/assets/img/citi-logo-white.svg" alt="Citi Logo">
+        </header>
+
+        <main>
+            <div class="placeholder" id="video-placeholder">
+                <i class="fa-solid fa-video-slash"></i>
+                <p>Camera is off</p>
+            </div>
+            <video id="video-feed" autoplay playsinline style="display: none;"></video>
+            
+            <div class="controls">
+                <button id="muteBtn" class="control-button" disabled>
+                    <i class="fa-solid fa-microphone"></i>
+                </button>
+                <button id="startStopBtn" class="control-button">
+                    <i class="fa-solid fa-phone"></i>
+                </button>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // --- UI Component References ---
+        const startStopBtn = document.getElementById('startStopBtn');
+        const muteBtn = document.getElementById('muteBtn');
+        const videoFeed = document.getElementById('video-feed');
+        const videoPlaceholder = document.getElementById('video-placeholder');
+        const startStopIcon = startStopBtn.querySelector('i');
+        const muteIcon = muteBtn.querySelector('i');
+
+        // --- State Management ---
+        let isConversationActive = false;
+        let isMuted = false;
+        let localStream = null;
+
+        // --- Event Listeners ---
+        startStopBtn.addEventListener('click', () => {
+            if (isConversationActive) {
+                endConversation();
+            } else {
+                startConversation();
+            }
+        });
+
+        muteBtn.addEventListener('click', toggleMute);
+
+        // --- Core Functionality ---
+        async function startConversation() {
+            try {
+                // Request access to camera and microphone
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                localStream = stream;
+
+                // Display the video feed
+                videoFeed.srcObject = stream;
+                videoFeed.style.display = 'block';
+                videoPlaceholder.style.display = 'none';
+
+                // Update UI state to "active"
+                isConversationActive = true;
+                startStopBtn.classList.add('active');
+                startStopIcon.classList.replace('fa-phone', 'fa-phone-slash');
+                muteBtn.disabled = false;
+                
+                console.log("Conversation started. Media stream acquired.");
+
+            } catch (error) {
+                console.error("Error accessing media devices.", error);
+                alert("Could not access camera and microphone. Please check your browser permissions.");
+            }
+        }
+
+        function endConversation() {
+            if (localStream) {
+                // Stop all tracks (camera and mic)
+                localStream.getTracks().forEach(track => track.stop());
+            }
+
+            // Reset UI to initial state
+            videoFeed.srcObject = null;
+            videoFeed.style.display = 'none';
+            videoPlaceholder.style.display = 'flex';
+
+            isConversationActive = false;
+            isMuted = false; // Reset mute state
+            startStopBtn.classList.remove('active');
+            startStopIcon.classList.replace('fa-phone-slash', 'fa-phone');
+            muteBtn.disabled = true;
+            muteIcon.classList.replace('fa-microphone-slash', 'fa-microphone');
+
+            console.log("Conversation ended. Media stream released.");
+        }
+
+        function toggleMute() {
+            if (!localStream) return;
+
+            isMuted = !isMuted;
+            // Enable or disable the first audio track found in the stream
+            localStream.getAudioTracks()[0].enabled = !isMuted;
+
+            // Update mute button icon
+            if (isMuted) {
+                muteIcon.classList.replace('fa-microphone', 'fa-microphone-slash');
+                console.log("Microphone muted.");
+            } else {
+                muteIcon.classList.replace('fa-microphone-slash', 'fa-microphone');
+                console.log("Microphone unmuted.");
+            }
+        }
+    </script>
+</body>
+</html>
