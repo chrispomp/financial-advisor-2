@@ -47,7 +47,7 @@
 
     <script>
         const ui = { startStopBtn: document.getElementById('startStopBtn'), muteBtn: document.getElementById('muteBtn'), videoFeed: document.getElementById('video-feed'), statusText: document.getElementById('status-text'), statusDot: document.getElementById('status-dot'), placeholder: document.getElementById('video-placeholder')};
-        let state = { isConversationActive: false, isMuted: false, localStream: null, socket: null, audioContext: null, audioProcessor: null };
+        let state = { isConversationActive: false, isMuted: false, localStream: null, socket: null, audioContext: null, audioProcessor: null, audioContextPlayback: null };
 
         ui.startStopBtn.addEventListener('click', () => state.isConversationActive ? endConversation() : startConversation());
         ui.muteBtn.addEventListener('click', toggleMute);
@@ -60,7 +60,9 @@
                 ui.videoFeed.srcObject = stream;
                 ui.videoFeed.style.display = 'block';
                 ui.placeholder.style.display = 'none';
+
                 await connectToAgent(session.id, stream);
+
                 state.isConversationActive = true;
                 ui.startStopBtn.classList.add('active');
                 ui.startStopBtn.querySelector('i').className = 'fa-solid fa-phone-slash';
@@ -94,6 +96,7 @@
                         await state.audioContext.audioWorklet.addModule('audio-processor.js');
                         state.audioProcessor = new AudioWorkletNode(state.audioContext, 'audio-processor');
                         state.audioContext.createMediaStreamSource(stream).connect(state.audioProcessor);
+
                         state.audioProcessor.port.onmessage = event => {
                             if (state.socket.readyState === WebSocket.OPEN) state.socket.send(event.data);
                         };
@@ -101,10 +104,18 @@
                     } catch (e) { reject(e); }
                 };
 
-                state.socket.onmessage = event => {
+                state.socket.onmessage = async event => {
                     if (event.data instanceof ArrayBuffer) {
-                       // This is where you would add logic to play back the agent's audio response.
-                       console.log(`🎤 Received agent audio chunk: ${event.data.byteLength} bytes`);
+                        if (!state.audioContextPlayback) {
+                            state.audioContextPlayback = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
+                        }
+                        try {
+                            const audioBuffer = await state.audioContextPlayback.decodeAudioData(event.data);
+                            const source = state.audioContextPlayback.createBufferSource();
+                            source.buffer = audioBuffer;
+                            source.connect(state.audioContextPlayback.destination);
+                            source.start();
+                        } catch (e) { console.error("Error playing audio chunk:", e); }
                     }
                 };
                 state.socket.onerror = (err) => { console.error("❌ WebSocket Error:", err); reject(err); };
@@ -116,12 +127,13 @@
             state.localStream?.getTracks().forEach(track => track.stop());
             state.socket?.close();
             state.audioContext?.close();
+            state.audioContextPlayback?.close();
             ui.videoFeed.srcObject = null;
             ui.videoFeed.style.display = 'none';
             ui.placeholder.style.display = 'flex';
             ui.statusText.textContent = 'Disconnected';
             ui.statusDot.classList.remove('connected');
-            state = { ...state, isConversationActive: false, isMuted: false, localStream: null, socket: null, audioContext: null };
+            state = { isConversationActive: false, isMuted: false, localStream: null, socket: null, audioContext: null, audioContextPlayback: null };
             ui.startStopBtn.classList.remove('active');
             ui.startStopBtn.querySelector('i').className = 'fa-solid fa-phone';
             ui.muteBtn.disabled = true;
