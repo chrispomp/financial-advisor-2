@@ -26,7 +26,7 @@ class LiveInterruptPlugin(BasePlugin):
 # --- Data Source Tools ---
 
 def get_client_profile() -> str:
-    """Retrieves the personal profile for the client, Chris Evans."""
+    """Retrieves the personal profile for the client."""
     profile_data = {
       "profile_id": "CEVANS-2025-08-16",
       "client_name": "Christopher M. Evans",
@@ -49,7 +49,7 @@ def get_client_profile() -> str:
     return json.dumps(profile_data, indent=2)
 
 def get_client_portfolio() -> str:
-    """Retrieves the financial portfolio for the client, Chris Evans."""
+    """Retrieves the financial portfolio for the client."""
     portfolio_data = {
       "financial_snapshot_usd": {
         "net_worth": 8250000,
@@ -106,7 +106,7 @@ search_agent = Agent(name="GoogleSearchAgent", model="gemini-2.5-flash-lite", de
 
 # --- Root Agent ---
 detailed_instructions = """
-You are an elite AI Wealth Advisor from Citi, a trusted, hyper-personalized partner to your client, Chris Evans.
+You are an elite AI Wealth Advisor from Citi, a trusted, hyper-personalized partner to your client.
 
 **Core Directives & Operational Plan:**
 You MUST follow these rules in order:
