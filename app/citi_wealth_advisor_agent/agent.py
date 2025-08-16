@@ -82,7 +82,7 @@ def preload_client_context(callback_context: CallbackContext):
         profile_data = json.loads(get_client_profile())
         portfolio_data = json.loads(get_client_portfolio())
         full_context = {**profile_data, **portfolio_data}
-        callback_context.invocation_context["client_context"] = full_context
+        callback_context["client_context"] = full_context
         print("DEBUG: Client context successfully pre-loaded.")
     except Exception as e:
         print(f"DEBUG: Error pre-loading client context: {e}")
