@@ -5,12 +5,8 @@ from google.adk.tools import google_search, agent_tool
 from google.adk.agents.callback_context import CallbackContext
 from google.genai import types
 from google.adk.runners import Runner, InMemoryRunner
-from google.adk.sessions import InMemorySessionService
 from google.adk.agents.run_config import RunConfig, StreamingMode
 from google.adk.plugins.base_plugin import BasePlugin
-import datetime
-from zoneinfo import ZoneInfo
-import os
 
 # --- Live Interrupt Plugin ---
 class LiveInterruptPlugin(BasePlugin):
@@ -27,189 +23,49 @@ class LiveInterruptPlugin(BasePlugin):
         invocation_context = callback_context.invocation_context
         live_request_queue = invocation_context.live_request_queue
         
-        # Check for new messages without blocking.
         if live_request_queue and not live_request_queue.empty():
             print("DEBUG: New message detected. Interrupting current model call.")
-            
-            # This is the crucial step. Setting end_invocation to True tells the runner
-            # to stop the current agent's run immediately.
             invocation_context.end_invocation = True
-            
-            # Return a quick text response to acknowledge the interruption.
-            # This response will be returned immediately, short-circuiting the LLM call.
             return types.Content(parts=[types.Part(text="I'm listening.")])
 
-        # Returning None allows the original model call to proceed.
         return None
 
 # --- Tool Definition: Client Profile ---
 def get_client_profile() -> str:
     """
-    Retrieves the detailed profile for the wealth management client, Chris Evans.
-    The data is returned as a JSON string for efficient processing.
-    This should be the primary source of information for answering any client-related questions.
+    Retrieves the detailed profile for the wealth management client, Chris Bonanno.
+    This should be the primary source for answering any client-related questions.
     """
     profile_data = {
-      "profile_id": "CEVANS-2025-0815",
-      "client_name": "Christopher M. Evans",
+      "profile_id": "12345",
+      "client_name": "Christopher Bonanno",
       "preferred_name": "Chris",
-      "relationship_manager": "Jane Foster",
-      "status": "Active, High-Potential",
-      "last_updated": "2025-08-15",
-      "summary": "High-earning, time-poor tech executive focused on long-term growth for retirement and children's education. Digitally savvy, values data-driven advice. Key opportunities include asset consolidation and advanced financial planning.",
-      "personal_info": {
-        "age": 45,
-        "occupation": "Senior Director, Product Management",
-        "employer": "Global Tech Firm",
-        "residence": {
-          "city": "Long Beach",
-          "state": "NY",
-          "zip": "11561"
-        },
-        "family": {
-          "marital_status": "Married",
-          "spouse": {
-            "name": "Emily Evans",
-            "age": 44,
-            "occupation": "Anesthesiologist, Stamford Hospital"
-          },
-          "dependents": [
-            {
-              "name": "Sophia Evans",
-              "relation": "Daughter",
-              "age": 16
-            },
-            {
-              "name": "Liam Evans",
-              "relation": "Son",
-              "age": 13
-            }
-          ]
-        }
-      },
+      "client_overview": "tech executive, married to Catherine Bonanno, and has two kids - Emilie (9) and Aiden (7)",
+      "investment_goal": "focused on long-term growth for retirement and children's education.",
+      "recent_activity": "Chris recently had an unusually large cash deposit into his checking account of $800,000, which may indicate a significant life event.",
+      "deepening_opportunities": "Chris currently does not have a credit card with Citi, and would be an ideal candidate for the new Citi Strate Elite card.",
       "financial_snapshot_usd": {
         "net_worth": 7450000,
-        "total_assets": 9050000,
-        "total_liabilities": 1400000,
         "assets": [
           {
-            "category": "Cash & Equivalents",
-            "institution": "Citi",
-            "account_type": "Citigold Checking",
-            "value": 350000
-          },
-          {
-            "category": "Cash & Equivalents",
-            "institution": "Competitor Firm",
-            "account_type": "Money Market Fund",
-            "value": 250000
+            "category": "Deposits",
+            "account_type": "Citigold Interest Checking",
+            "value": 1030000,
+            "rate": "0.10%"
           },
           {
             "category": "Investments",
-            "institution": "Citi",
             "account_type": "Brokerage Account",
             "value": 3200000,
-            "notes": "70% Equities, 25% Fixed Income, 5% Alternatives.",
             "top_holdings": [
-              {
-                "ticker": "AAPL",
-                "market_value": 150000,
-                "shares": 649
-              },
-              {
-                "ticker": "MSFT",
-                "market_value": 140000,
-                "shares": 268
-              },
-              {
-                "ticker": "AMZN",
-                "market_value": 130000,
-                "shares": 562
-              },
-              {
-                "ticker": "GOOGL",
-                "market_value": 120000,
-                "shares": 583
-              },
-              {
-                "ticker": "JPM",
-                "market_value": 110000,
-                "shares": 378
-              },
-              {
-                "ticker": "UNH",
-                "market_value": 100000,
-                "shares": 329
-              }
+              {"ticker": "AAPL", "market_value": 150000},
+              {"ticker": "MSFT", "market_value": 140000},
+              {"ticker": "AMZN", "market_value": 130000},
+              {"ticker": "GOOGL", "market_value": 120000},
+              {"ticker": "JPM", "market_value": 110000},
+              {"ticker": "UNH", "market_value": 100000}
             ]
-          },
-          {
-            "category": "Investments",
-            "account_type": "Employer 401(k)",
-            "value": 1800000
-          },
-          {
-            "category": "Investments",
-            "account_type": "Vested Stock Options",
-            "value": 950000,
-            "notes": "Significant concentration in a single tech stock."
-          },
-          {
-            "category": "Real Estate",
-            "property_type": "Primary Residence",
-            "value": 2500000
           }
-        ],
-        "liabilities": [
-          {
-            "type": "Primary Mortgage",
-            "balance": 1400000,
-            "notes": "30-year fixed at 3.25%."
-          }
-        ]
-      },
-      "goals_and_objectives": [
-        {
-          "priority": "Primary",
-          "goal": "Retirement Planning",
-          "details": {
-            "target_age": 65,
-            "desired_annual_income_post_tax": 350000
-          }
-        },
-        {
-          "priority": "Secondary",
-          "goal": "Education Funding",
-          "details": {
-            "beneficiaries": ["Sophia Evans", "Liam Evans"],
-            "college_timeline_years": {"Sophia": 2, "Liam": 5},
-            "target_amount_per_child": 300000,
-            "notes": "High-priority: No dedicated 529 plans established."
-          }
-        },
-        {
-          "priority": "Tertiary",
-          "goal": "Estate Planning",
-          "details": {
-            "objective": "Efficient wealth transfer and tax burden minimization.",
-            "notes": "Has basic wills but no advanced trust structures."
-          }
-        }
-      ],
-      "client_profile": {
-        "risk_tolerance": "Moderate Growth",
-        "investment_knowledge": "High",
-        "investment_philosophy": "Prefers a diversified, long-term approach but lacks time for active management.",
-        "interaction_preference": "Quarterly video reviews, one annual in-person review, and concise email summaries."
-      },
-      "citi_relationship": {
-        "client_since": 2015,
-        "actionable_opportunities": [
-          {"area": "Consolidation", "action": "Propose plan to move competitor-held Money Market fund to Citi."},
-          {"area": "Education Planning", "action": "Discuss benefits and funding of 529 College Savings Plans."},
-          {"area": "Concentrated Stock", "action": "Present options for hedging or systematically selling vested company stock."},
-          {"area": "Credit & Lending", "action": "Introduce mortgage specialists to review refinancing options."},
-          {"area": "Estate Planning", "action": "Schedule introduction with a Trust & Estate specialist."}
         ]
       }
     }
@@ -218,103 +74,83 @@ def get_client_profile() -> str:
 # --- Tool Definition: Citi Guidance ---
 def get_citi_guidance() -> str:
     """
-    Retrieves the official investment strategy and market outlook from Citi's Chief Investment Officer (CIO).
-    This information should be used as the basis for all investment recommendations and market commentary.
+    Retrieves the official investment strategy and market outlook from Citi's CIO.
     """
     guidance = {
-        "cio_outlook_summary": "We maintain a moderately constructive outlook on global markets, balancing resilient economic growth against persistent inflationary pressures and geopolitical risks. We advocate for a strategy of quality and diversification, focusing on companies with strong balance sheets and durable earnings power. We are neutral on equities and moderately overweight fixed income, with a preference for high-quality corporate and municipal bonds. Alternative investments play a key role for diversification.",
-        "date_of_guidance": "2025-08-12",
-        "strategic_asset_allocation_moderate_risk": {
-            "equities": {
-                "total_allocation": "55%",
-                "us_large_cap": "30%",
-                "us_smid_cap": "5%",
-                "international_developed": "15%",
-                "emerging_markets": "5%"
-            },
-            "fixed_income": {
-                "total_allocation": "35%",
-                "investment_grade_corporate": "20%",
-                "us_treasuries": "10%",
-                "high_yield": "5%"
-            },
-            "alternatives": {
-                "total_allocation": "10%",
-                "notes": "Includes real estate, private credit, and commodities for inflation hedging and diversification."
-            },
-            "cash_and_equivalents": "0-5% (Tactical)"
-        },
-        "key_themes": [
-            "Quality Over Growth: Prioritize companies with proven profitability and low debt.",
-            "Yield is Back: Take advantage of attractive yields in high-quality fixed income.",
-            "Diversify Globally: US market leadership may narrow; opportunities exist in international developed markets.",
-            "Hedge Inflation: Real assets and alternative investments can provide a buffer against persistent inflation."
-        ],
-        "disclaimer": "This guidance is for informational purposes only and does not constitute a personalized investment recommendation. All investment decisions should be made in consultation with a qualified financial advisor based on the client's individual circumstances and risk tolerance."
+        "cio_outlook_summary": "We maintain a moderately constructive outlook on global markets, balancing resilient economic growth against persistent inflationary pressures. We advocate for a strategy of quality and diversification.",
+        "key_themes": ["Quality Over Growth", "Yield is Back", "Diversify Globally"]
     }
     return json.dumps(guidance, indent=2)
 
 # --- Greeting Callback: ---
 def greeting_callback(callback_context: CallbackContext) -> types.Content | None:
-    """
-    Greets the user at the beginning of a session.
-    """
+    """Greets the user at the beginning of a session."""
     try:
-        session = callback_context.session
-        if len(session.events) == 1:
+        if len(callback_context.session.events) == 1:
             client_profile = json.loads(get_client_profile())
             preferred_name = client_profile.get("preferred_name", "Chris")
-            greeting_message = f"Hello {preferred_name}, welcome. How can I help you today?"
-            return types.Content(parts=[types.Part(text=greeting_message)])
+            return types.Content(parts=[types.Part(text=f"Hello {preferred_name}, welcome. How can I help you today?")])
     except AttributeError as e:
         print(f"DEBUG: Could not find session attribute. Error: {e}")
-        return None
     return None
 
 # --- Specialist Agents: ---
 profile_agent = Agent(
     name="ClientProfileAgent",
     model="gemini-2.5-flash-lite",
-    description="Use this agent to retrieve information about the client, Chris Evans. It can access all of his profile information like his financial snapshot, goals, and personal details. It can provide things like current stock holdings, total assets, total liabilities, etc.",
-    instruction="You are an expert at retrieving information from a client's profile. Use your tool to answer questions about the client.",
+    description="Use this agent to retrieve information about the client such as their financial holdings and personal details.",
     tools=[get_client_profile]
 )
 
 search_agent = Agent(
     name="GoogleSearchAgent",
     model="gemini-2.5-flash-lite",
-    description="Use this agent for all general knowledge questions, such as current events, market news, or any information not found in the client's profile. This can be anything like sports scores, weather forecast, or things to do locally",
-    instruction="You are an expert researcher. You answer questions by searching the internet.",
+    description="Use this agent for general knowledge questions, such as current events, market news, or information about specific companies.",
     tools=[google_search]
 )
 
-# --- Specialist Agent: Citi Guidance ---
 guidance_agent = Agent(
     name="CitiGuidanceAgent",
     model="gemini-2.5-flash-lite",
     description="Use this agent to get the official investment strategy and market outlook from Citi's Chief Investment Officer (CIO).",
-    instruction="You are an expert at retrieving and presenting official investment guidance. Use your tool to provide the current CIO outlook.",
     tools=[get_citi_guidance]
 )
 
 # --- Root Agent: ---
 detailed_instructions = """
-You are a friendly, professional, and concise AI Wealth Advisor for Citi's wealth management clients. You are always speaking with your client, Chris Evans. If the user asks questions that are location based (e.g., weather forecast, things to do this weekend, etc.), assume they're asking for where they live unless otherwise specified. For example, Chris Evans lives in Long Beach, NY, so give him weather forecasts for Long Beach, NY.
+You are a friendly, professional, and concise AI Wealth Advisor for your client. Your primary directive is to answer questions by orchestrating responses from specialist agents.
 
-**Your Primary Directive:** Your main purpose is to answer Chris's questions by delegating them to the correct specialist agent. You must follow the operational logic below precisely.
+**Core Principles:**
+- **Assume Location:** For location-based questions (e.g., weather), use Chris's home in Long Beach, NY, unless specified otherwise.
+- **Maintain Context:** Remember previous turns in the conversation to provide relevant follow-up answers.
+- **Synthesize Information:** After gathering information from specialist agents, synthesize it into a single, clear, and concise answer for Chris.
 
-**Operational Logic & Tools**
-1.  **Vision for Visual Questions:** If Chris asks a question about what you see (e.g., "what am I wearing?"), answer based on the video input.
-2.  **Use `CitiGuidanceAgent` for Investment Advice:** For any questions about investment strategy, market outlook, asset allocation, or specific recommendations, you MUST use the `CitiGuidanceAgent` FIRST to retrieve the official CIO guidance. Then, use that guidance to inform your answer.
-3.  **Use `ClientProfileAgent` for Client Questions:** For any questions about Chris's personal finances, goals, family, or existing holdings, including investments, stocks, or the portfolio, you MUST use the `ClientProfileAgent`.
-4.  **Use `GoogleSearchAgent` for Everything Else:** For all other questions, including general market news (e.g., "what did the S&P 500 close at?"), or information not covered by the other agents, you MUST use the `GoogleSearchAgent`.
-5.  **Answer Directly:** Once you receive the information from the specialist agent, synthesize it and relay it clearly and concisely to Chris.
+**Operational Logic & Multi-Step Reasoning:**
+You must handle complex questions that require multiple steps and using several tools in sequence.
+
+1.  **Deconstruct the Request:** First, break down the user's query into logical steps.
+2.  **Tool Selection:** For each step, select the appropriate specialist agent.
+    -   **`ClientProfileAgent`**: For questions about Chris's personal finances, goals, or portfolio holdings.
+    -   **`GoogleSearchAgent`**: For all other questions, including general news or real-time market data.
+    -   **`CitiGuidanceAgent`**: For official investment strategy and market outlook.
+    -   **Vision**: For questions about what you see via video feed.
+3.  **Execute and Pass Context:** Execute the steps in order. Crucially, you **MUST** use the output from one step as the input for the next.
+
+**Example Multi-Step Scenario:**
+- **User Query:** "How did my stocks perform this week?"
+- **Your Thought Process:**
+    1.  "I need to know *what* the user's stocks are. I will use the `ClientProfileAgent`."
+    2.  "After I get the list of stock tickers, I need to find their performance. I will use the `GoogleSearchAgent`."
+- **Execution:**
+    1.  Call `ClientProfileAgent` to get the list of stock holdings (e.g., AAPL, MSFT, AMZN).
+    2.  Call `GoogleSearchAgent` using the list to search for "AAPL, MSFT, AMZN stock performance this week".
+    3.  Synthesize the results into a final, easy-to-understand answer.
 """
 
 root_agent = Agent(
    name="citi_wealth_advisor_agent",
-   model="gemini-live-2.5-flash-preview-native-audio",
-   description="An AI agent providing client-specific information and market news for a Citi Wealth Management advisor.",
+   model="gemini-live-2.5-flash-preview-native-audio", # Reverted to the model that supports native voices
+   description="An AI wealth advisor for Citi clients.",
    instruction=detailed_instructions,
    tools=[
        agent_tool.AgentTool(agent=profile_agent),
@@ -324,114 +160,36 @@ root_agent = Agent(
    before_agent_callback=greeting_callback
 )
 
-async def run_live_agent(query: str, user_id: str, session_id: str):
-    """Runs the agent in a live, bidirectional streaming session with interruption support."""
+# --- CONFIGURATION: Define the default native voice in one place ---
+DEFAULT_VOICE = 'Aoede'
 
-    runner = InMemoryRunner(
-        agent=root_agent,
-        plugins=[LiveInterruptPlugin()]
-    )
-
+async def run_live_agent(query: str, user_id: str, session_id: str, voice_name: str = DEFAULT_VOICE):
+    """Runs the agent in a live, bidirectional streaming session."""
+    runner = InMemoryRunner(agent=root_agent, plugins=[LiveInterruptPlugin()])
     live_request_queue = LiveRequestQueue()
 
-    # The key change for immediate interruption is here: adjusting proactivity.
-    # We are setting a lower proactivity to prioritize listening over speaking.
     run_config = RunConfig(
         streaming_mode=StreamingMode.BIDI,
         speech_config=types.SpeechConfig(
             voice_config=types.VoiceConfig(
-                prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                    voice_name='en-US-Standard-H'
-                )
+                # For native voices like 'Aoede', use the 'voice' parameter.
+                voice=voice_name
             )
         ),
         response_modalities=["AUDIO", "TEXT", "VIDEO"],
-        # A lower number here will make the model more likely to be interrupted.
-        proactivity=types.ProactivityConfig(
-            level=0.2
+        proactivity=types.Proactivity(
+            proactivity=0.1
         )
     )
 
-    initial_message = types.Content(
-        role="user",
-        parts=[types.Part(text=query)]
-    )
+    initial_message = types.Content(role="user", parts=[types.Part(text=query)])
     live_request_queue.send_content(initial_message)
-    await live_request_queue.close() # Explicitly close the initial stream
+    await live_request_queue.close()
 
-    print(f"User Query: {query}")
+    print(f"User Query: '{query}' (Voice: {voice_name})")
     print("-" * 30)
 
-    async for event in runner.run_live(
-        user_id=user_id,
-        session_id=session_id,
-        live_request_queue=live_request_queue,
-        run_config=run_config
-    ):
-        if event.content and event.content.parts:
-            for part in event.content.parts:
-                if part.text:
-                    print(f"Agent Response: {part.text}")
-                if hasattr(part, "inline_data") and part.inline_data:
-                    print("Agent is streaming audio...")
-                    
-    await runner.close()
-    
-# In a real application, you would be sending data from a client to the live_request_queue.
-# This function simulates that.
-async def run_simulated_interruption(query1: str, query2: str, user_id: str, session_id: str):
-    runner = InMemoryRunner(
-        agent=root_agent,
-        plugins=[LiveInterruptPlugin()]
-    )
-
-    live_request_queue = LiveRequestQueue()
-
-    run_config = RunConfig(
-        streaming_mode=StreamingMode.BIDI,
-        speech_config=types.SpeechConfig(
-            voice_config=types.VoiceConfig(
-                prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                    voice_name='en-US-Standard-C'
-                )
-            )
-        ),
-        response_modalities=["AUDIO", "TEXT", "VIDEO"],
-        # A lower number makes the model more likely to be interrupted.
-        proactivity=types.ProactivityConfig(
-            level=0.5
-        )
-    )
-
-    # Simulate the first, longer query
-    async def send_first_query():
-        initial_message = types.Content(
-            role="user",
-            parts=[types.Part(text=query1)]
-        )
-        live_request_queue.send_content(initial_message)
-        # We don't close the stream here to simulate the agent starting to talk.
-    
-    # Simulate the second query that interrupts the first
-    async def send_interrupt_query():
-        await asyncio.sleep(2) # Wait a bit for the first query to start processing
-        print("\n--- Simulating User Interruption ---")
-        interrupt_message = types.Content(
-            role="user",
-            parts=[types.Part(text=query2)]
-        )
-        live_request_queue.send_content(interrupt_message)
-        # We close the stream here to indicate the interruption is the full new message
-        await live_request_queue.close()
-
-
-    print(f"Simulated Query 1: {query1}")
-    print(f"Simulated Interruption Query 2: {query2}")
-    print("-" * 30)
-
-    async with asyncio.TaskGroup() as tg:
-        tg.create_task(send_first_query())
-        tg.create_task(send_interrupt_query())
+    try:
         async for event in runner.run_live(
             user_id=user_id,
             session_id=session_id,
@@ -443,22 +201,29 @@ async def run_simulated_interruption(query1: str, query2: str, user_id: str, ses
                     if part.text:
                         print(f"Agent Response: {part.text}")
                     if hasattr(part, "inline_data") and part.inline_data:
-                        print("Agent is streaming audio...")
-    
-    await runner.close()
-
+                        print("...Agent is streaming audio/video...")
+    finally:
+        await runner.close()
 
 async def main():
-    # Example 1: Standard conversation
-    await run_live_agent("Hello, who are you?", "user_123", "session_001")
+    """Main function to run agent examples."""
+    print("--- Running Multi-Step Query Example ---")
+    await run_live_agent(
+        "How did my top stock holdings perform this week?",
+        "user_123",
+        "session_001",
+        voice_name=DEFAULT_VOICE # Uses the default 'Aoede' voice
+    )
     
     print("\n\n" + "="*50 + "\n\n")
 
-    # Example 2: Interruption demonstration
-    # Here, "What is the capital of France?" will interrupt the agent
-    # while it's responding to "Tell me about yourself."
-    await run_simulated_interruption("Tell me about yourself in a very, very long and detailed paragraph.", "What is the capital of France?", "user_123", "session_002")
-
+    print("--- Running General Knowledge Example (with a different voice) ---")
+    await run_live_agent(
+        "What's the weather like in Long Beach, New York?",
+        "user_123",
+        "session_002",
+        voice_name='en-US-Standard-J' # Example of overriding the default voice
+    )
 
 if __name__ == "__main__":
     asyncio.run(main())
