@@ -2,8 +2,8 @@ import json
 from google.adk.agents import Agent
 from google.adk.tools import google_search, AgentTool
 from google.adk.agents.callback_context import CallbackContext
-from google.genai import types
 
+# --- Data Source Tools ---
 def get_client_profile() -> str:
     """Retrieves the personal, non-financial profile for the client, Chris Evans."""
     return json.dumps({
@@ -44,10 +44,12 @@ def preload_client_context(callback_context: CallbackContext):
         except Exception as e:
             print(f"❌ DEBUG: Error pre-loading context: {e}")
 
+# --- Specialist Agents ---
 profile_agent = Agent(name="ProfileAgent", model="gemini-2.5-flash", description="For client's personal info.", tools=[get_client_profile])
 portfolio_agent = Agent(name="PortfolioAgent", model="gemini-2.5-flash", description="For client's financial accounts.", tools=[get_client_portfolio])
 search_agent = Agent(name="GoogleSearchAgent", model="gemini-2.5-flash", description="For general knowledge.", tools=[google_search])
 
+# --- Root Agent ---
 detailed_instructions = """
 You are an elite AI Wealth Advisor from Citi. You communicate only through voice.
 **Core Directives:**

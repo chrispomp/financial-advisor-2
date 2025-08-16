@@ -47,7 +47,7 @@
 
     <script>
         const ui = { startStopBtn: document.getElementById('startStopBtn'), muteBtn: document.getElementById('muteBtn'), videoFeed: document.getElementById('video-feed'), statusText: document.getElementById('status-text'), statusDot: document.getElementById('status-dot'), placeholder: document.getElementById('video-placeholder')};
-        let state = { isConversationActive: false, isMuted: false, localStream: null, socket: null, audioContext: null, audioProcessor: null, audioQueue: [], isPlaying: false, audioContextPlayback: null };
+        let state = { isConversationActive: false, isMuted: false, localStream: null, socket: null, audioContext: null, audioProcessor: null };
 
         ui.startStopBtn.addEventListener('click', () => state.isConversationActive ? endConversation() : startConversation());
         ui.muteBtn.addEventListener('click', toggleMute);
@@ -60,20 +60,18 @@
                 ui.videoFeed.srcObject = stream;
                 ui.videoFeed.style.display = 'block';
                 ui.placeholder.style.display = 'none';
-                
                 await connectToAgent(session.id, stream);
-                
                 state.isConversationActive = true;
                 ui.startStopBtn.classList.add('active');
                 ui.startStopBtn.querySelector('i').className = 'fa-solid fa-phone-slash';
                 ui.muteBtn.disabled = false;
             } catch (error) {
                 console.error("❌ Failed to start conversation:", error);
-                alert("Could not start conversation. Check permissions and ensure the backend is running.");
+                alert("Could not start. Check console for errors.");
                 endConversation();
             }
         }
-        
+
         async function createAgentSession() {
             const response = await fetch('http://localhost:8000/apps/citi_wealth_advisor_agent/users/user/sessions', { method: 'POST' });
             if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
@@ -82,80 +80,48 @@
             return session;
         }
 
-        async function connectToAgent(sessionId, stream) {
-            state.socket = new WebSocket(`ws://localhost:8000/run_live?app_name=citi_wealth_advisor_agent&user_id=user&session_id=${sessionId}`);
-            state.socket.binaryType = "arraybuffer";
+        function connectToAgent(sessionId, stream) {
+            return new Promise(async (resolve, reject) => {
+                state.socket = new WebSocket(`ws://localhost:8000/run_live?app_name=citi_wealth_advisor_agent&user_id=user&session_id=${sessionId}`);
+                state.socket.binaryType = "arraybuffer";
 
-            return new Promise((resolve, reject) => {
                 state.socket.onopen = async () => {
                     console.log("✅ WebSocket connected. Initializing audio processor.");
                     ui.statusText.textContent = 'Connected';
                     ui.statusDot.classList.add('connected');
-                    
                     try {
                         state.audioContext = new AudioContext({ sampleRate: 16000 });
                         await state.audioContext.audioWorklet.addModule('audio-processor.js');
                         state.audioProcessor = new AudioWorkletNode(state.audioContext, 'audio-processor');
                         state.audioContext.createMediaStreamSource(stream).connect(state.audioProcessor);
-                        
                         state.audioProcessor.port.onmessage = event => {
-                            if (state.socket.readyState === WebSocket.OPEN) {
-                                state.socket.send(event.data);
-                            }
+                            if (state.socket.readyState === WebSocket.OPEN) state.socket.send(event.data);
                         };
                         resolve();
-                    } catch (e) {
-                        console.error("❌ AudioWorklet Error:", e);
-                        reject(e);
-                    }
-                };
-                
-                state.socket.onmessage = event => {
-                    if (event.data instanceof ArrayBuffer) {
-                        state.audioQueue.push(event.data);
-                        if (!state.isPlaying) playNextAudioChunk();
-                    }
+                    } catch (e) { reject(e); }
                 };
 
+                state.socket.onmessage = event => {
+                    if (event.data instanceof ArrayBuffer) {
+                       // This is where you would add logic to play back the agent's audio response.
+                       console.log(`🎤 Received agent audio chunk: ${event.data.byteLength} bytes`);
+                    }
+                };
                 state.socket.onerror = (err) => { console.error("❌ WebSocket Error:", err); reject(err); };
                 state.socket.onclose = () => { console.log("🔌 WebSocket closed."); if(state.isConversationActive) endConversation(); };
             });
         }
 
-        async function playNextAudioChunk() {
-            if (state.audioQueue.length === 0) { state.isPlaying = false; return; }
-            state.isPlaying = true;
-            if (!state.audioContextPlayback) {
-                state.audioContextPlayback = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
-            }
-            const pcmData = state.audioQueue.shift();
-            try {
-                const audioBuffer = await state.audioContextPlayback.decodeAudioData(pcmData);
-                const source = state.audioContextPlayback.createBufferSource();
-                source.buffer = audioBuffer;
-                source.connect(state.audioContextPlayback.destination);
-                source.start();
-                source.onended = playNextAudioChunk;
-            } catch (e) {
-                console.error("Error playing audio chunk:", e);
-                state.isPlaying = false; 
-            }
-        }
-        
         function endConversation() {
             state.localStream?.getTracks().forEach(track => track.stop());
             state.socket?.close();
             state.audioContext?.close();
-            state.audioContextPlayback?.close();
-            
             ui.videoFeed.srcObject = null;
             ui.videoFeed.style.display = 'none';
             ui.placeholder.style.display = 'flex';
             ui.statusText.textContent = 'Disconnected';
             ui.statusDot.classList.remove('connected');
-            
-            state = { isConversationActive: false, isMuted: false, localStream: null, socket: null, audioContext: null, audioContextPlayback: null, audioQueue: [], isPlaying: false };
-            
+            state = { ...state, isConversationActive: false, isMuted: false, localStream: null, socket: null, audioContext: null };
             ui.startStopBtn.classList.remove('active');
             ui.startStopBtn.querySelector('i').className = 'fa-solid fa-phone';
             ui.muteBtn.disabled = true;
