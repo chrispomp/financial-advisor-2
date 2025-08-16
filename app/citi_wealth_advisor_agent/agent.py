@@ -20,7 +20,7 @@ class LiveInterruptPlugin(BasePlugin):
         if live_request_queue and not live_request_queue.empty():
             print("DEBUG: New message detected. Interrupting current model call.")
             invocation_context.end_invocation = True
-            return types.Content(parts=[types.Part(text="I'm listening.")])
+            return types.Content()
         return None
 
 # --- Data Source Tools ---
@@ -76,26 +76,16 @@ def get_citi_guidance() -> str:
     return json.dumps(guidance, indent=2)
 
 # --- Consolidated Callback ---
-def initialize_and_greet(callback_context: CallbackContext) -> types.Content | None:
-    """Loads client context at the start of the turn and greets the user on the first turn."""
+def preload_client_context(callback_context: CallbackContext):
+    """Loads the full client context into the agent's memory at the start of each turn."""
     try:
         profile_data = json.loads(get_client_profile())
         portfolio_data = json.loads(get_client_portfolio())
         full_context = {**profile_data, **portfolio_data}
         callback_context.invocation_context["client_context"] = full_context
-        print("DEBUG: Client context successfully loaded.")
-
-        if callback_context.session and len(callback_context.session.events) == 1:
-            preferred_name = full_context.get("preferred_name", "there")
-            interests = full_context.get("personal_info", {}).get("personal_interests", [])
-            greeting = f"Hello {preferred_name}, welcome back. "
-            if "New York Jets" in interests:
-                 greeting += "Hope you're looking forward to the Jets game this weekend. "
-            greeting += "How can I help you today?"
-            return types.Content(parts=[types.Part(text=greeting)])
+        print("DEBUG: Client context successfully pre-loaded.")
     except Exception as e:
-        print(f"DEBUG: Error in callback: {e}")
-    return None
+        print(f"DEBUG: Error pre-loading client context: {e}")
 
 # --- Specialist Agents ---
 profile_agent = Agent(name="ProfileAgent", model="gemini-2.5-flash-lite", description="For client's personal info (family, residence, interests).", tools=[get_client_profile])
@@ -110,24 +100,11 @@ You are an elite AI Wealth Advisor from Citi, a trusted, hyper-personalized part
 
 **Core Directives & Operational Plan:**
 You MUST follow these rules in order:
-1.  **Hyper-Personalize (CRITICAL):** You MUST use the `personal_info` and `investment_profile` from the `client_context` to make the conversation feel personal. Reference their interests, preferences, goals, and risk tolerance.
-2.  **Location Mandate:** For ANY location-sensitive query (e.g., "things to do," "restaurants"), you MUST use the client's residence from the context in your tool call.
-3.  **Vision First:** If asked about what you see, answer based on the visual input.
-4.  **Check Context First:** For all other questions, check the pre-loaded `client_context` first.
+1.  **Check Context First (CRITICAL):** The `client_context` is your primary source of truth. For ANY question about the client (e.g., "what's my name?", "how old am I?", "what's my favorite team?"), you MUST find the answer in the `client_context` first before using any other tool.
+2.  **First Turn Greeting:** On the first turn of a new conversation, start your response by greeting the client by their `preferred_name` from the context. Then, answer their question in the same response.
+3.  **Location Mandate:** For ANY location-sensitive query (e.g., "things to do"), you MUST use the client's residence from the context in your tool call.
+4.  **Vision First:** If asked about what you see, answer based on the visual input.
 5.  **Formulate a Plan & Execute:** If the answer is not in the context, determine the tool sequence, execute the calls, and synthesize the results into a single, insightful response.
-
-**Crucial Example 1: Personalized Recommendation**
--   **User Query:** "Any good restaurants around here?"
--   **Your Thought Process:**
-    1.  "This is a location-based, personal question. I must use both critical directives."
-    2.  "Step 1: Check `client_context`. Residence is 'Long Beach, NY'. Favorite food is 'Mexican'."
-    3.  "Step 2: My plan is to call `GoogleSearchAgent`."
-    4.  "Step 3: I will execute the call with the query 'best Mexican restaurants in Long Beach NY'."
-    5.  "Step 4: I will synthesize the results and respond, 'Since you enjoy Mexican food, you might like...'"
-
-**Crucial Example 2: Personalized Advice**
--   **User Query:** "What should I do with the extra cash in my account?"
--   **Your Thought Process:** "This requires personalized financial advice. I'll check the client's `investment_profile` for their goals and risk tolerance, then call `CitiGuidanceAgent` to get the bank's official strategy, and finally synthesize the two into a tailored recommendation."
 """
 
 root_agent = Agent(
@@ -142,7 +119,7 @@ root_agent = Agent(
        agent_tool.AgentTool(agent=guidance_agent),
        agent_tool.AgentTool(agent=search_agent)
    ],
-   before_agent_callback=initialize_and_greet
+   before_agent_callback=preload_client_context
 )
 
 # --- Main Execution ---
@@ -156,7 +133,7 @@ async def run_live_agent(query: str, user_id: str, session_id: str, voice_name: 
         streaming_mode=StreamingMode.BIDI,
         speech_config=types.SpeechConfig(voice_config=types.VoiceConfig(voice=voice_name)),
         response_modalities=["AUDIO", "TEXT", "VIDEO"],
-        proactivity=types.Proactivity(proactivity=0.5)
+        proactivity=types.Proactivity(proactivity=0.1)
     )
 
     live_request_queue.send_content(types.Content(role="user", parts=[types.Part(text=query)]))
@@ -175,8 +152,8 @@ async def run_live_agent(query: str, user_id: str, session_id: str, voice_name: 
 
 async def main():
     """Main function to run agent examples."""
-    print("--- 1. Testing Personalized Restaurant Recommendation ---")
-    await run_live_agent("I'm hungry. Any ideas for dinner?", "user_123", "session_001")
+    print("--- 1. Testing Knowledge of Age ---")
+    await run_live_agent("How old am I?", "user_123", "session_001")
 
     print("\n\n" + "="*50 + "\n\n")
 
