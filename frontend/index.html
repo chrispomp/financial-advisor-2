@@ -6,17 +6,16 @@
     <title>Citi AI Wealth Advisor</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <style>
-        /* --- Branding and Style Guidelines --- */
         :root {
             --primary-blue: #003B70;
             --primary-red: #D9261C;
             --neutral-bg: #FFFFFF;
             --neutral-light-gray: #F0F2F5;
             --text-dark-gray: #333333;
+            --status-green: #28a745;
             --font-family: 'Helvetica Neue', Arial, sans-serif;
         }
 
-        /* --- Overall Layout & Mobile Container --- */
         body {
             background-color: var(--neutral-light-gray);
             font-family: var(--font-family);
@@ -32,8 +31,8 @@
         .mobile-container {
             width: 100%;
             max-width: 400px;
-            height: 80vh;
-            max-height: 700px;
+            height: 85vh;
+            max-height: 750px;
             background-color: var(--neutral-bg);
             border-radius: 20px;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
@@ -42,11 +41,11 @@
             flex-direction: column;
         }
 
-        /* --- Header with Logo --- */
         header {
             padding: 15px 20px;
             background-color: var(--primary-blue);
             text-align: center;
+            flex-shrink: 0;
         }
 
         header img {
@@ -54,11 +53,18 @@
             width: auto;
         }
         
-        /* --- Main Content Area: Video and Controls --- */
         main {
             flex-grow: 1;
             position: relative;
             background-color: #000;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .video-container {
+            position: relative;
+            width: 100%;
+            flex-grow: 1;
         }
 
         #video-feed {
@@ -77,6 +83,9 @@
             flex-direction: column;
             color: #ccc;
             background-color: #2c2c2c;
+            position: absolute;
+            top: 0;
+            left: 0;
         }
 
         .placeholder i {
@@ -84,17 +93,59 @@
             margin-bottom: 20px;
         }
 
-        .controls {
+        .status-overlay {
             position: absolute;
-            bottom: 0;
-            left: 0;
-            right: 0;
+            top: 10px;
+            left: 10px;
+            background-color: rgba(0, 0, 0, 0.5);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: var(--primary-red);
+            margin-right: 8px;
+        }
+        
+        .status-dot.connected {
+            background-color: var(--status-green);
+        }
+
+        .transcript-overlay {
+            position: absolute;
+            bottom: 100px; /* Above controls */
+            left: 20px;
+            right: 20px;
+            color: white;
+            text-shadow: 1px 1px 3px rgba(0,0,0,0.7);
+            font-size: 18px;
+            text-align: center;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .transcript-overlay.visible {
+            opacity: 1;
+        }
+
+
+        .controls {
             padding: 20px;
-            background: linear-gradient(to top, rgba(0,0,0,0.7), transparent);
+            background-color: #000;
             display: flex;
             justify-content: center;
             align-items: center;
             gap: 20px;
+            flex-shrink: 0;
+            position: relative;
+            z-index: 10;
         }
 
         .control-button {
@@ -137,11 +188,18 @@
         </header>
 
         <main>
-            <div class="placeholder" id="video-placeholder">
-                <i class="fa-solid fa-video-slash"></i>
-                <p>Camera is off</p>
+            <div class="video-container">
+                 <div class="placeholder" id="video-placeholder">
+                    <i class="fa-solid fa-video-slash"></i>
+                    <p>Session not started</p>
+                </div>
+                <video id="video-feed" autoplay muted playsinline style="display: none;"></video>
+                <div class="status-overlay">
+                    <div id="status-dot" class="status-dot"></div>
+                    <span id="status-text">Disconnected</span>
+                </div>
+                <div id="transcript" class="transcript-overlay"></div>
             </div>
-            <video id="video-feed" autoplay playsinline style="display: none;"></video>
             
             <div class="controls">
                 <button id="muteBtn" class="control-button" disabled>
@@ -162,11 +220,19 @@
         const videoPlaceholder = document.getElementById('video-placeholder');
         const startStopIcon = startStopBtn.querySelector('i');
         const muteIcon = muteBtn.querySelector('i');
+        const statusDot = document.getElementById('status-dot');
+        const statusText = document.getElementById('status-text');
+        const transcriptDiv = document.getElementById('transcript');
 
         // --- State Management ---
         let isConversationActive = false;
         let isMuted = false;
         let localStream = null;
+        let mediaRecorder = null;
+        let socket = null;
+        let transcriptTimeout;
+        
+        const INITIAL_PROMPT = "Hello";
 
         // --- Event Listeners ---
         startStopBtn.addEventListener('click', () => {
@@ -182,65 +248,160 @@
         // --- Core Functionality ---
         async function startConversation() {
             try {
-                // Request access to camera and microphone
+                const session = await createAgentSession();
+                if (!session || !session.id) {
+                    throw new Error("Failed to create an agent session.");
+                }
+                const sessionId = session.id;
+                console.log(`Session created successfully: ${sessionId}`);
+
                 const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
                 localStream = stream;
-
-                // Display the video feed
                 videoFeed.srcObject = stream;
                 videoFeed.style.display = 'block';
                 videoPlaceholder.style.display = 'none';
-
-                // Update UI state to "active"
                 isConversationActive = true;
                 startStopBtn.classList.add('active');
                 startStopIcon.classList.replace('fa-phone', 'fa-phone-slash');
                 muteBtn.disabled = false;
                 
-                console.log("Conversation started. Media stream acquired.");
+                connectToAgent(sessionId);
 
             } catch (error) {
-                console.error("Error accessing media devices.", error);
-                alert("Could not access camera and microphone. Please check your browser permissions.");
+                console.error("Error starting conversation:", error);
+                alert("Could not start conversation. Check the console for details.");
+            }
+        }
+        
+        async function createAgentSession() {
+            const sessionUrl = 'http://localhost:8000/apps/citi_wealth_advisor_agent/users/user/sessions';
+            try {
+                const response = await fetch(sessionUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({})
+                });
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return await response.json();
+            } catch (error) {
+                console.error('Failed to create session:', error);
+                return null;
             }
         }
 
         function endConversation() {
             if (localStream) {
-                // Stop all tracks (camera and mic)
                 localStream.getTracks().forEach(track => track.stop());
             }
-
-            // Reset UI to initial state
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();
+            }
+            if (socket) {
+                socket.close();
+            }
             videoFeed.srcObject = null;
             videoFeed.style.display = 'none';
             videoPlaceholder.style.display = 'flex';
-
             isConversationActive = false;
-            isMuted = false; // Reset mute state
+            isMuted = false;
             startStopBtn.classList.remove('active');
             startStopIcon.classList.replace('fa-phone-slash', 'fa-phone');
             muteBtn.disabled = true;
             muteIcon.classList.replace('fa-microphone-slash', 'fa-microphone');
-
-            console.log("Conversation ended. Media stream released.");
         }
 
         function toggleMute() {
             if (!localStream) return;
-
             isMuted = !isMuted;
-            // Enable or disable the first audio track found in the stream
             localStream.getAudioTracks()[0].enabled = !isMuted;
-
-            // Update mute button icon
             if (isMuted) {
                 muteIcon.classList.replace('fa-microphone', 'fa-microphone-slash');
-                console.log("Microphone muted.");
             } else {
                 muteIcon.classList.replace('fa-microphone-slash', 'fa-microphone');
-                console.log("Microphone unmuted.");
             }
+        }
+
+        function connectToAgent(sessionId) {
+            const wsUrl = `ws://localhost:8000/run_live?app_name=citi_wealth_advisor_agent&user_id=user&session_id=${sessionId}`;
+            socket = new WebSocket(wsUrl);
+
+            socket.onopen = () => {
+                console.log("WebSocket connection established. Sending initial prompt.");
+                statusText.textContent = 'Connected';
+                statusDot.classList.add('connected');
+                
+                const initialMessage = {
+                    content: { role: 'user', parts: [{ text: INITIAL_PROMPT }] }
+                };
+                socket.send(JSON.stringify(initialMessage));
+
+                mediaRecorder = new MediaRecorder(localStream);
+                mediaRecorder.ondataavailable = event => {
+                    if (event.data.size > 0 && socket.readyState === WebSocket.OPEN) {
+                        
+                        // --- FIX: Convert audio blob to Base64 and wrap in JSON ---
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                            // result includes "data:audio/webm;base64,...." - we only want the part after the comma
+                            const base64Audio = reader.result.split(',')[1]; 
+                            
+                            const audioMessage = {
+                                content: {
+                                    parts: [{
+                                        inline_data: {
+                                            mime_type: 'audio/webm', // MediaRecorder typically uses webm
+                                            data: base64Audio
+                                        }
+                                    }]
+                                }
+                            };
+
+                            if (socket.readyState === WebSocket.OPEN) {
+                                socket.send(JSON.stringify(audioMessage));
+                            }
+                        };
+                        reader.readAsDataURL(event.data);
+                    }
+                };
+                mediaRecorder.start(250); // Send audio chunks every 250ms
+            };
+
+            socket.onmessage = event => {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.content && data.content.parts) {
+                        const textPart = data.content.parts.find(p => p.text);
+                        if (textPart) {
+                            console.log("Agent response:", textPart.text);
+                            transcriptDiv.textContent = textPart.text;
+                            transcriptDiv.classList.add('visible');
+                            clearTimeout(transcriptTimeout);
+                            transcriptTimeout = setTimeout(() => {
+                               transcriptDiv.classList.remove('visible');
+                            }, 5000);
+                        }
+                    }
+                } catch (e) {
+                    console.warn("Received non-JSON message from server:", event.data);
+                }
+            };
+
+            socket.onerror = error => {
+                console.error("WebSocket error:", error);
+                statusText.textContent = 'Connection Error';
+                statusDot.classList.remove('connected');
+            };
+
+            socket.onclose = (event) => {
+                console.log("WebSocket connection closed:", event.code, event.reason);
+                statusText.textContent = 'Disconnected';
+                statusDot.classList.remove('connected');
+                if (isConversationActive) {
+                    endConversation();
+                }
+            };
         }
     </script>
 </body>
