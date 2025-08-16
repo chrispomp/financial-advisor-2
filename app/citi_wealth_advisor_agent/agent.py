@@ -35,7 +35,7 @@ def get_client_profile() -> str:
         "age": 45,
         "residence": {"city": "Long Beach", "state": "NY"},
         "family": {"dependents": [{"name": "Sophia", "age": 16}, {"name": "Liam", "age": 13}]},
-        "personal_interests": ["New York Jets", "technology", "skiing"],
+        "personal_interests": ["New York Jets", "technology", "punk rock music"],
         "preferences": {
             "favorite_food": ["Mexican", "Sushi", "Burgers"]
         }
@@ -87,7 +87,6 @@ def initialize_and_greet(callback_context: CallbackContext) -> types.Content | N
 
         if callback_context.session and len(callback_context.session.events) == 1:
             preferred_name = full_context.get("preferred_name", "there")
-            # --- ADDED: Proactive, personalized greeting ---
             interests = full_context.get("personal_info", {}).get("personal_interests", [])
             greeting = f"Hello {preferred_name}, welcome back. "
             if "New York Jets" in interests:
