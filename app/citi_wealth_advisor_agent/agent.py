@@ -34,7 +34,7 @@ def get_client_profile() -> str:
       "personal_info": {
         "residence": {"city": "Long Beach", "state": "NY"},
         "family": {"dependents": [{"name": "Sophia"}, {"name": "Liam"}]},
-        "personal_interests": ["technology", "reading", "skiing"],
+        "personal_interests": ["technology", "reading", "music"],
         "preferences": {
             "favorite_football_team": "New York Jets",
             "favorite_food": "Taco Bell"
