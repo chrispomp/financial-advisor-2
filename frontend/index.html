@@ -94,21 +94,13 @@
 
         function connectToAgent(sessionId, stream) {
             return new Promise(async (resolve, reject) => {
-                state.socket = new WebSocket('ws://localhost:8000/ws/');
+                state.socket = new WebSocket(`ws://localhost:8000/run_live?app_name=citi_wealth_advisor_agent&user_id=user&session_id=${sessionId}`);
                 state.socket.binaryType = "arraybuffer";
 
                 state.socket.onopen = async () => {
-                    console.log("✅ WebSocket connection opened. Sending handshake.");
-                    // ADK Handshake: send connection details
-                    state.socket.send(JSON.stringify({
-                        app_name: 'citi_wealth_advisor_agent',
-                        user_id: 'user',
-                        session_id: sessionId
-                    }));
-
+                    console.log("✅ WebSocket connected. Initializing audio processor.");
                     ui.statusText.textContent = 'Connected';
                     ui.statusDot.classList.add('connected');
-
                     try {
                         state.audioContext = new AudioContext({ sampleRate: 16000 });
                         await state.audioContext.audioWorklet.addModule('audio-processor.js');
