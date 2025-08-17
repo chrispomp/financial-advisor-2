@@ -141,6 +141,7 @@ runner = Runner(
     app_name="citi_wealth_advisor_agent",
     agent=root_agent,
     session_service=InMemorySessionService(),
+    before_model_callback=load_context_on_turn,
 )
 
 async def start_agent_session(user_id, is_audio=False):
