@@ -79,19 +79,10 @@ def get_citi_guidance() -> str:
 def preload_client_context(callback_context: CallbackContext):
     """Loads the full client context into the agent's memory at the start of each turn."""
     try:
-        # The context object's structure can differ. For run_live, it seems to have
-        # .invocation_context, but for other runners it might be the context itself.
-        # This makes the callback more robust.
-        context = getattr(callback_context, 'invocation_context', callback_context)
-
         profile_data = json.loads(get_client_profile())
         portfolio_data = json.loads(get_client_portfolio())
         full_context = {**profile_data, **portfolio_data}
-
-        # The 'state' attribute of the context is used to store data
-        # that persists for the duration of the agent run.
-        context.state["client_context"] = full_context
-
+        callback_context.invocation_context["client_context"] = full_context
         print("DEBUG: Client context successfully pre-loaded.")
     except Exception as e:
         print(f"DEBUG: Error pre-loading client context: {e}")
@@ -140,16 +131,13 @@ async def run_live_agent(query: str, user_id: str, session_id: str, voice_name: 
     live_request_queue = LiveRequestQueue()
     run_config = RunConfig(
         streaming_mode=StreamingMode.BIDI,
-        speech_config=types.SpeechConfig(
-            voice_config=types.VoiceConfig(
-                prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=voice_name)
-            )
-        ),
-        response_modalities=["AUDIO"],
-        output_audio_transcription={},
+        speech_config=types.SpeechConfig(voice_config=types.VoiceConfig(voice=voice_name)),
+        response_modalities=["AUDIO", "TEXT", "VIDEO"],
+        proactivity=types.Proactivity(proactivity=0.1)
     )
 
     live_request_queue.send_content(types.Content(role="user", parts=[types.Part(text=query)]))
+    await live_request_queue.close()
 
     print(f"\nUser Query: '{query}' (Voice: {voice_name})")
     print("-" * 30)
@@ -160,42 +148,17 @@ async def run_live_agent(query: str, user_id: str, session_id: str, voice_name: 
                     if part.text:
                         print(f"Agent Response: {part.text}")
     finally:
-        await live_request_queue.close()
         await runner.close()
-
-async def run_agent_for_test(query: str, user_id: str, session_id: str):
-    """Runs the agent for a single turn for testing."""
-    print(f"\nUser Query: '{query}'")
-    print("-" * 30)
-
-    runner = InMemoryRunner(agent=root_agent, app_name="citi_wealth_advisor_agent")
-    session_service = runner.session_service
-
-    await session_service.create_session(
-        app_name="citi_wealth_advisor_agent",
-        user_id=user_id,
-        session_id=session_id,
-    )
-
-    async for event in runner.run_async(
-        user_id=user_id,
-        session_id=session_id,
-        new_message=types.Content(
-            role="user", parts=[types.Part(text=query)]
-        ),
-    ):
-        if event.is_final_response() and event.content:
-            print(f"Agent Response: {event.content.parts[0].text.strip()}")
 
 async def main():
     """Main function to run agent examples."""
     print("--- 1. Testing Knowledge of Age ---")
-    await run_agent_for_test("How old am I?", "user_123", "session_001")
+    await run_live_agent("How old am I?", "user_123", "session_001")
 
     print("\n\n" + "="*50 + "\n\n")
 
     print("--- 2. Testing Personal Interest Knowledge ---")
-    await run_agent_for_test("What's my favorite football team?", "user_123", "session_002")
+    await run_live_agent("What's my favorite football team?", "user_123", "session_002", voice_name='en-US-Standard-J')
 
 if __name__ == "__main__":
     asyncio.run(main())
