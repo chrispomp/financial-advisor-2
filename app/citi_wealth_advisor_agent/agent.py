@@ -78,8 +78,10 @@ def load_context_on_turn(callback_context: CallbackContext):
         full_context = {**profile_data, **portfolio_data}
         callback_context.invocation_context["client_context"] = full_context
         print("DEBUG: Client context successfully pre-loaded.")
+    except json.JSONDecodeError as e:
+        print(f"DEBUG: Error decoding JSON from data source: {e}")
     except Exception as e:
-        print(f"DEBUG: Error pre-loading client context: {e}")
+        print(f"DEBUG: An unexpected error occurred while pre-loading client context: {e}")
 
 
 # --- Specialist Agents (No changes needed here) ---
@@ -124,7 +126,7 @@ app = FastAPI()
 # Allow requests from your web page
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # In production, restrict this to your domain
+    allow_origins=["http://localhost:8080"], # In production, restrict this to your domain
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

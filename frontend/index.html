@@ -58,7 +58,7 @@
             transcript: document.getElementById('agent-transcript'),
         };
 
-        let state = {
+        const initialState = {
             isConversationActive: false,
             isMuted: false,
             localStream: null,
@@ -67,6 +67,10 @@
             audioProcessor: null,
             audioBufferQueue: [], // Buffer for incoming audio
         };
+
+        let state = { ...initialState };
+
+        const serverUrl = 'http://localhost:8000';
 
         ui.startStopBtn.addEventListener('click', () => state.isConversationActive ? endConversation() : startConversation());
         ui.muteBtn.addEventListener('click', toggleMute);
@@ -110,10 +114,7 @@
             ui.statusDot.classList.remove('connected');
 
             // Reset state object
-            Object.assign(state, {
-                isConversationActive: false, isMuted: false, localStream: null,
-                socket: null, audioContext: null, audioProcessor: null, audioBufferQueue: []
-            });
+            state = { ...initialState };
 
             ui.startStopBtn.classList.remove('active');
             ui.startStopBtn.querySelector('i').className = 'fa-solid fa-phone';
@@ -124,7 +125,7 @@
         // --- Network and Media Setup ---
 
         async function createAgentSession() {
-            const response = await fetch('http://localhost:8000/apps/citi_wealth_advisor_agent/users/user/sessions', { method: 'POST' });
+            const response = await fetch(`${serverUrl}/apps/citi_wealth_advisor_agent/users/user/sessions`, { method: 'POST' });
             if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
             const session = await response.json();
             console.log(`✅ Session created: ${session.id}`);
@@ -133,7 +134,8 @@
 
         function connectToAgent(sessionId, stream) {
             return new Promise(async (resolve, reject) => {
-                state.socket = new WebSocket(`ws://localhost:8000/run_live?app_name=citi_wealth_advisor_agent&user_id=user&session_id=${sessionId}`);
+                const wsUrl = serverUrl.replace('http', 'ws');
+                state.socket = new WebSocket(`${wsUrl}/run_live?app_name=citi_wealth_advisor_agent&user_id=user&session_id=${sessionId}`);
                 state.socket.binaryType = "arraybuffer";
 
                 state.socket.onopen = async () => {
@@ -195,17 +197,12 @@
         }
         
         function playBufferedAudio() {
-            const totalLength = state.audioBufferQueue.reduce((acc, value) => acc + value.byteLength, 0);
-            const concatenated = new Uint8Array(totalLength);
+            if (state.audioBufferQueue.length === 0) return;
 
-            let offset = 0;
-            for (const buffer of state.audioBufferQueue) {
-                concatenated.set(new Uint8Array(buffer), offset);
-                offset += buffer.byteLength;
-            }
+            const pcmData = new Blob(state.audioBufferQueue);
 
             // Create a WAV file from the raw PCM data and play it
-            const wavBlob = createWavBlob(concatenated.buffer, 16000);
+            const wavBlob = createWavBlob(pcmData, 16000);
             const audioUrl = URL.createObjectURL(wavBlob);
             const audio = new Audio(audioUrl);
             audio.play();
@@ -231,7 +228,7 @@
             // RIFF identifier
             writeString(view, 0, 'RIFF');
             // file length
-            view.setUint32(4, 36 + pcmData.byteLength, true);
+            view.setUint32(4, 36 + pcmData.size, true);
             // RIFF type
             writeString(view, 8, 'WAVE');
             // format chunk identifier
@@ -253,7 +250,7 @@
             // data chunk identifier
             writeString(view, 36, 'data');
             // data chunk length
-            view.setUint32(40, pcmData.byteLength, true);
+            view.setUint32(40, pcmData.size, true);
 
             return new Blob([header, pcmData], { type: 'audio/wav' });
         }
