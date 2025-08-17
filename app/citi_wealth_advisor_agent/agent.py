@@ -119,7 +119,7 @@ root_agent = Agent(
        agent_tool.AgentTool(agent=guidance_agent),
        agent_tool.AgentTool(agent=search_agent)
    ],
-   before_agent_callback=preload_client_context
+   # before_agent_callback=preload_client_context
 )
 
 # --- Main Execution ---
