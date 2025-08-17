@@ -11,12 +11,13 @@
         .mobile-container { width: 100%; max-width: 400px; height: 85vh; max-height: 750px; background-color: var(--neutral-bg); border-radius: 20px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1); overflow: hidden; display: flex; flex-direction: column; }
         header { padding: 15px 20px; background-color: var(--primary-blue); text-align: center; flex-shrink: 0; }
         header img { height: 30px; }
-        main { flex-grow: 1; position: relative; background-color: #000; display: flex; flex-direction: column; }
-        .video-container { position: relative; width: 100%; flex-grow: 1; }
-        #video-feed { width: 100%; height: 100%; object-fit: cover; }
-        .placeholder { width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; flex-direction: column; color: #ccc; background-color: #2c2c2c; position: absolute; top: 0; left: 0; }
-        .placeholder i { font-size: 80px; margin-bottom: 20px; }
-        #agent-transcript { display: none; }
+        main { flex-grow: 1; position: relative; background-color: #000; display: flex; flex-direction: column; justify-content: space-between; }
+        .agent-view { position: relative; width: 100%; flex-grow: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+        .agent-placeholder { text-align: center; color: #ccc; }
+        .agent-placeholder i { font-size: 80px; margin-bottom: 20px; }
+        .agent-placeholder.active i { color: var(--primary-blue); animation: pulse 2s infinite; }
+        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
+        #agent-transcript { position: absolute; bottom: 20px; left: 20px; right: 20px; background: rgba(0, 0, 0, 0.5); color: white; padding: 15px; border-radius: 10px; text-align: center; font-size: 1.1em; min-height: 50px; display: flex; align-items: center; justify-content: center; }
         .status-overlay { position: absolute; top: 10px; left: 10px; background-color: rgba(0, 0, 0, 0.5); color: white; padding: 5px 10px; border-radius: 15px; font-size: 14px; display: flex; align-items: center; }
         .status-dot { width: 10px; height: 10px; border-radius: 50%; background-color: var(--primary-red); margin-right: 8px; }
         .status-dot.connected { background-color: var(--status-green); }
@@ -32,10 +33,12 @@
     <div class="mobile-container">
         <header><img src="https://www.citi.com/mobile-apps/assets/img/citi-logo-white.svg" alt="Citi Logo"></header>
         <main>
-            <div class="video-container">
-                <div class="placeholder" id="video-placeholder"><i class="fa-solid fa-video-slash"></i><p>Session not started</p></div>
-                <video id="video-feed" autoplay muted playsinline style="display: none;"></video>
-                <div id="agent-transcript"></div>
+            <div class="agent-view">
+                <div class="agent-placeholder" id="agent-placeholder">
+                    <i class="fa-solid fa-brain"></i>
+                    <p>Session not started</p>
+                </div>
+                <div id="agent-transcript"><p>...</p></div>
                 <div class="status-overlay">
                     <div id="status-dot" class="status-dot"></div><span id="status-text">Disconnected</span>
                 </div>
@@ -51,10 +54,9 @@
         const ui = {
             startStopBtn: document.getElementById('startStopBtn'),
             muteBtn: document.getElementById('muteBtn'),
-            videoFeed: document.getElementById('video-feed'),
             statusText: document.getElementById('status-text'),
             statusDot: document.getElementById('status-dot'),
-            placeholder: document.getElementById('video-placeholder'),
+            placeholder: document.getElementById('agent-placeholder'),
             transcript: document.getElementById('agent-transcript'),
         };
 
@@ -66,6 +68,7 @@
             audioContext: null,
             audioProcessor: null,
             audioPlayer: null,
+            transcriptText: '',
         };
 
         let state = { ...initialState };
@@ -79,12 +82,12 @@
 
         async function startConversation() {
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: { sampleRate: 16000, channelCount: 1 } });
+                // Request audio only, aligning with API capabilities
+                const stream = await navigator.mediaDevices.getUserMedia({ video: false, audio: { sampleRate: 16000, channelCount: 1 } });
                 
                 state.localStream = stream;
-                ui.videoFeed.srcObject = stream;
-                ui.videoFeed.style.display = 'block';
-                ui.placeholder.style.display = 'none';
+                ui.placeholder.classList.add('active');
+                ui.placeholder.querySelector('p').textContent = 'Connecting...';
 
                 await connectToAgent(stream);
 
@@ -92,6 +95,7 @@
                 ui.startStopBtn.classList.add('active');
                 ui.startStopBtn.querySelector('i').className = 'fa-solid fa-phone-slash';
                 ui.muteBtn.disabled = false;
+                ui.placeholder.querySelector('p').textContent = 'Listening...';
             } catch (error) {
                 console.error("❌ Failed to start conversation:", error);
                 alert("Could not start. Check console for errors.");
@@ -104,11 +108,11 @@
             state.socket?.close();
             state.audioContext?.close();
             
-            ui.videoFeed.srcObject = null;
-            ui.videoFeed.style.display = 'none';
-            ui.placeholder.style.display = 'flex';
+            ui.placeholder.classList.remove('active');
+            ui.placeholder.querySelector('p').textContent = 'Session ended';
             ui.statusText.textContent = 'Disconnected';
             ui.statusDot.classList.remove('connected');
+            ui.transcript.innerHTML = '<p>...</p>';
 
             // Reset state object
             state = { ...initialState };
@@ -132,7 +136,6 @@
                     ui.statusText.textContent = 'Connected';
                     ui.statusDot.classList.add('connected');
                     try {
-                        // Start processing microphone audio and sending it to the agent
                         await setupAudio(stream);
                         resolve();
                     } catch (e) { reject(e); }
@@ -145,20 +148,23 @@
         }
 
         async function setupAudio(stream) {
-            state.audioContext = new AudioContext({ sampleRate: 16000 });
+            // The API output is 24kHz, so we should set our context to that for proper playback.
+            state.audioContext = new AudioContext({ sampleRate: 24000 });
 
-            // Setup audio recorder
-            await state.audioContext.audioWorklet.addModule('audio-processor.js');
-            state.audioProcessor = new AudioWorkletNode(state.audioContext, 'audio-processor');
+            // Setup audio recorder (sends 16kHz audio from microphone)
             const source = state.audioContext.createMediaStreamSource(stream);
-            source.connect(state.audioProcessor);
-            state.audioProcessor.port.onmessage = event => {
+            const recorderWorklet = new AudioWorkletNode(state.audioContext, 'audio-processor');
+            source.connect(recorderWorklet);
+            recorderWorklet.port.onmessage = event => {
                 if (state.socket && state.socket.readyState === WebSocket.OPEN) {
                     state.socket.send(event.data);
                 }
             };
+            // We need to load the module for the recorder before we can create the node
+            await state.audioContext.audioWorklet.addModule('audio-processor.js');
 
-            // Setup audio player
+
+            // Setup audio player (receives 24kHz audio from agent)
             await state.audioContext.audioWorklet.addModule('audio-player.js');
             state.audioPlayer = new AudioWorkletNode(state.audioContext, 'audio-player-processor');
             state.audioPlayer.connect(state.audioContext.destination);
@@ -169,14 +175,27 @@
         function handleAgentMessage(event) {
             if (event.data instanceof ArrayBuffer) {
                 // This is an audio chunk, send it to the player
-                state.audioPlayer.port.postMessage(event.data);
+                state.audioPlayer.port.postMessage({ pcmData: new Int16Array(event.data) });
                 return;
             }
             
             // This is a JSON message
             const message = JSON.parse(event.data);
             console.log("Agent Message:", message);
-            // We don't need to do anything with turn_complete or interrupted messages for now
+
+            // Handle transcription updates
+            if (message.server_content && message.server_content.output_transcription) {
+                const newText = message.server_content.output_transcription.text;
+                if (newText) {
+                    state.transcriptText = newText;
+                    ui.transcript.innerHTML = `<p>${state.transcriptText}</p>`;
+                }
+            }
+
+            // When the model turn is complete, clear the transcript for the next turn
+            if (message.server_content && message.server_content.turn_complete) {
+                state.transcriptText = '';
+            }
         }
         
         // --- Utility Functions ---

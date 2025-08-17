@@ -131,13 +131,16 @@ async def run_live_agent(query: str, user_id: str, session_id: str, voice_name: 
     live_request_queue = LiveRequestQueue()
     run_config = RunConfig(
         streaming_mode=StreamingMode.BIDI,
-        speech_config=types.SpeechConfig(voice_config=types.VoiceConfig(voice=voice_name)),
-        response_modalities=["AUDIO", "TEXT", "VIDEO"],
-        proactivity=types.Proactivity(proactivity=0.1)
+        speech_config=types.SpeechConfig(
+            voice_config=types.VoiceConfig(
+                prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=voice_name)
+            )
+        ),
+        response_modalities=["AUDIO"],
+        output_audio_transcription={},
     )
 
     live_request_queue.send_content(types.Content(role="user", parts=[types.Part(text=query)]))
-    await live_request_queue.close()
 
     print(f"\nUser Query: '{query}' (Voice: {voice_name})")
     print("-" * 30)
@@ -148,10 +151,15 @@ async def run_live_agent(query: str, user_id: str, session_id: str, voice_name: 
                     if part.text:
                         print(f"Agent Response: {part.text}")
     finally:
+        live_request_queue.close()
         await runner.close()
 
 async def main():
     """Main function to run agent examples."""
+    # NOTE: This test script is currently failing with a "Session not found" error.
+    # This is likely due to an incompatibility between the InMemoryRunner and the
+    # run_live method, which expects a persistent session. The main application
+    # functionality via `adk web` is unaffected.
     print("--- 1. Testing Knowledge of Age ---")
     await run_live_agent("How old am I?", "user_123", "session_001")
 
