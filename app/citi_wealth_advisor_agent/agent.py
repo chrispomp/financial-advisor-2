@@ -1,6 +1,7 @@
 import json
 import asyncio
 import uvicorn
+from dotenv import load_dotenv
 from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from google.adk.agents import Agent, LiveRequestQueue
@@ -11,6 +12,8 @@ from google.adk.agents.run_config import RunConfig, StreamingMode
 from google.adk.runners import Runner
 from google.adk.sessions.in_memory_session_service import InMemorySessionService
 from google.genai.types import Content, Part
+
+load_dotenv()
 
 # --- Data Source Tools (No changes needed here) ---
 
@@ -151,13 +154,7 @@ async def start_agent_session(user_id, is_audio=False):
     # Set response modality
     modality = "AUDIO" if is_audio else "TEXT"
     run_config = RunConfig(
-        response_modalities=[modality],
-        speech_config=types.SpeechConfig(
-            input_audio_config=types.InputAudioConfig(
-                encoding="LINEAR16",
-                sample_rate_hertz=16000
-            )
-        )
+        response_modalities=[modality]
     )
 
     # Create a LiveRequestQueue for this session
@@ -188,12 +185,6 @@ async def agent_to_client_messaging(websocket, live_events):
             )
             if not part:
                 continue
-
-            if part.text:
-                message = {
-                    "text": part.text
-                }
-                await websocket.send_text(json.dumps(message))
 
             if part.inline_data:
                 await websocket.send_bytes(part.inline_data.data)

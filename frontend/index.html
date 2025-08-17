@@ -16,7 +16,7 @@
         #video-feed { width: 100%; height: 100%; object-fit: cover; }
         .placeholder { width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; flex-direction: column; color: #ccc; background-color: #2c2c2c; position: absolute; top: 0; left: 0; }
         .placeholder i { font-size: 80px; margin-bottom: 20px; }
-        #agent-transcript { position: absolute; bottom: 20px; left: 20px; right: 20px; background-color: rgba(0, 0, 0, 0.6); color: white; padding: 15px; border-radius: 10px; font-size: 16px; min-height: 50px; opacity: 0; transition: opacity 0.3s; }
+        #agent-transcript { display: none; }
         .status-overlay { position: absolute; top: 10px; left: 10px; background-color: rgba(0, 0, 0, 0.5); color: white; padding: 5px 10px; border-radius: 15px; font-size: 14px; display: flex; align-items: center; }
         .status-dot { width: 10px; height: 10px; border-radius: 50%; background-color: var(--primary-red); margin-right: 8px; }
         .status-dot.connected { background-color: var(--status-green); }
@@ -107,8 +107,6 @@
             ui.videoFeed.srcObject = null;
             ui.videoFeed.style.display = 'none';
             ui.placeholder.style.display = 'flex';
-            ui.transcript.textContent = '';
-            ui.transcript.style.opacity = 0;
             ui.statusText.textContent = 'Disconnected';
             ui.statusDot.classList.remove('connected');
 
@@ -176,11 +174,7 @@
             const message = JSON.parse(event.data);
             console.log("Agent Message:", message);
 
-            if (message.text) {
-                ui.transcript.textContent = message.text;
-                ui.transcript.style.opacity = 1;
-                
-                // When we get a final text transcript, play the buffered audio
+            if (message.turn_complete || message.interrupted) {
                 if (state.audioBufferQueue.length > 0) {
                     playBufferedAudio();
                 }
@@ -189,7 +183,7 @@
         
         function playBufferedAudio() {
             if (state.audioBufferQueue.length === 0) return;
-            
+
             const pcmData = new Blob(state.audioBufferQueue);
 
             // Create a WAV file from the raw PCM data and play it
