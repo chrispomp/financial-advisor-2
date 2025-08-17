@@ -75,17 +75,24 @@ def get_citi_guidance() -> str:
     }
     return json.dumps(guidance, indent=2)
 
-# --- Consolidated Callback ---
-def preload_client_context(callback_context: CallbackContext):
-    """Loads the full client context into the agent's memory at the start of each turn."""
+# --- Context Loading Callback ---
+def load_context_on_turn(callback_context: CallbackContext):
+    """Loads client context into memory at the start of a turn if not already present."""
+    # The `before_model_callback` runs before each model call. We add a check
+    # to only load the context once per turn.
+    if "client_context" in callback_context.invocation_context:
+        return
+
     try:
+        print("DEBUG: `client_context` not found. Loading now.")
         profile_data = json.loads(get_client_profile())
         portfolio_data = json.loads(get_client_portfolio())
         full_context = {**profile_data, **portfolio_data}
-        callback_context["client_context"] = full_context
+        callback_context.invocation_context["client_context"] = full_context
         print("DEBUG: Client context successfully pre-loaded.")
     except Exception as e:
         print(f"DEBUG: Error pre-loading client context: {e}")
+
 
 # --- Specialist Agents ---
 profile_agent = Agent(name="ProfileAgent", model="gemini-2.5-flash-lite", description="For client's personal info (family, residence, interests).", tools=[get_client_profile])
@@ -119,7 +126,7 @@ root_agent = Agent(
        agent_tool.AgentTool(agent=guidance_agent),
        agent_tool.AgentTool(agent=search_agent)
    ],
-   # before_agent_callback=preload_client_context
+   before_model_callback=load_context_on_turn
 )
 
 # --- Main Execution ---
