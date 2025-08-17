@@ -1,85 +1,73 @@
 import json
 import asyncio
-from google.adk.agents import Agent, LiveRequestQueue
+import uvicorn
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from google.adk.agents import Agent
 from google.adk.tools import google_search, agent_tool
 from google.adk.agents.callback_context import CallbackContext
 from google.genai import types
-from google.adk.runners import Runner, InMemoryRunner
 from google.adk.agents.run_config import RunConfig, StreamingMode
-from google.adk.plugins.base_plugin import BasePlugin
+from google.adk.extensions.fastapi_runner import add_live_run_route, add_session_create_route
 
-# --- Live Interrupt Plugin ---
-class LiveInterruptPlugin(BasePlugin):
-    """A plugin to check for new user input and interrupt the agent's ongoing generation."""
-    def __init__(self):
-        super().__init__(name="live_interrupt_plugin")
-
-    async def before_model_callback(self, *, callback_context: CallbackContext, **kwargs):
-        invocation_context = callback_context.invocation_context
-        live_request_queue = invocation_context.live_request_queue
-        if live_request_queue and not live_request_queue.empty():
-            print("DEBUG: New message detected. Interrupting current model call.")
-            invocation_context.end_invocation = True
-            return types.Content()
-        return None
-
-# --- Data Source Tools ---
+# --- Data Source Tools (No changes needed here) ---
 
 def get_client_profile() -> str:
-    """Retrieves the personal profile for the client."""
-    profile_data = {
-      "profile_id": "CEVANS-2025-08-16",
-      "client_name": "Christopher M. Evans",
-      "preferred_name": "Chris",
-      "personal_info": {
-        "age": 45,
-        "residence": {"city": "Long Beach", "state": "NY"},
-        "family": {"dependents": [{"name": "Sophia", "age": 16}, {"name": "Liam", "age": 13}]},
-        "personal_interests": ["New York Jets", "technology", "punk rock music"],
-        "preferences": {
-            "favorite_food": ["Mexican", "Sushi", "Burgers"]
-        }
-      },
-      "investment_profile": {
-          "risk_tolerance": "Moderate Growth",
-          "investment_horizon": "Long-term (15+ years)",
-          "primary_goals": ["Retirement Planning", "Education Funding for children"]
-      }
-    }
-    return json.dumps(profile_data, indent=2)
+   """Retrieves the personal profile for the client."""
+   profile_data = {
+     "profile_id": "CEVANS-2025-08-16",
+     "client_name": "Christopher M. Evans",
+     "preferred_name": "Chris",
+     "personal_info": {
+       "age": 45,
+       "residence": {"city": "Long Beach", "state": "NY"},
+       "family": {"dependents": [{"name": "Sophia", "age": 16}, {"name": "Liam", "age": 13}]},
+       "personal_interests": ["New York Jets", "technology", "punk rock music"],
+       "preferences": {
+           "favorite_food": ["Mexican", "Sushi", "Burgers"]
+       }
+     },
+     "investment_profile": {
+         "risk_tolerance": "Moderate Growth",
+         "investment_horizon": "Long-term (15+ years)",
+         "primary_goals": ["Retirement Planning", "Education Funding for children"]
+     }
+   }
+   return json.dumps(profile_data, indent=2)
+
 
 def get_client_portfolio() -> str:
-    """Retrieves the financial portfolio for the client."""
-    portfolio_data = {
-      "financial_snapshot_usd": {
-        "net_worth": 8250000,
-        "assets": [
-          {"category": "Cash & Equivalents", "account_type": "Citigold Checking", "value": 1150000},
-          {"category": "Investments", "account_type": "Brokerage Account",
-           "top_holdings": [{"ticker": "AAPL"}, {"ticker": "MSFT"}, {"ticker": "GOOGL"}]}
-        ]
-      },
-      "recent_activity": "Chris recently had an unusually large cash deposit of $800,000, which may indicate a significant life event."
-    }
-    return json.dumps(portfolio_data, indent=2)
+   """Retrieves the financial portfolio for the client."""
+   portfolio_data = {
+     "financial_snapshot_usd": {
+       "net_worth": 8250000,
+       "assets": [
+         {"category": "Cash & Equivalents", "account_type": "Citigold Checking", "value": 1150000},
+         {"category": "Investments", "account_type": "Brokerage Account",
+          "top_holdings": [{"ticker": "AAPL"}, {"ticker": "MSFT"}, {"ticker": "GOOGL"}]}
+       ]
+     },
+     "recent_activity": "Chris recently had an unusually large cash deposit of $800,000, which may indicate a significant life event."
+   }
+   return json.dumps(portfolio_data, indent=2)
+
 
 def get_citi_product_catalog() -> str:
-    """Retrieves Citi's catalog of featured products and services."""
-    return json.dumps({"products": [{"product_name": "Citi Strata Elite Card", "category": "Credit Card"}]})
+   """Retrieves Citi's catalog of featured products and services."""
+   return json.dumps({"products": [{"product_name": "Citi Strata Elite Card", "category": "Credit Card"}]})
+
 
 def get_citi_guidance() -> str:
-    """Retrieves the official investment strategy and market outlook from Citi's CIO."""
-    guidance = {
-        "cio_message_summary": "We are navigating a complex global market, favoring quality and diversification. We see potential in high-quality fixed income and select global equities.",
-        "key_investment_themes": ["Focus on Quality", "The Return of Yield", "Go Global for Growth"]
-    }
-    return json.dumps(guidance, indent=2)
+   """Retrieves the official investment strategy and market outlook from Citi's CIO."""
+   guidance = {
+       "cio_message_summary": "We are navigating a complex global market, favoring quality and diversification. We see potential in high-quality fixed income and select global equities.",
+       "key_investment_themes": ["Focus on Quality", "The Return of Yield", "Go Global for Growth"]
+   }
+   return json.dumps(guidance, indent=2)
 
-# --- Context Loading Callback ---
+# --- Context Loading Callback (No changes needed here) ---
 def load_context_on_turn(callback_context: CallbackContext):
     """Loads client context into memory at the start of a turn if not already present."""
-    # The `before_model_callback` runs before each model call. We add a check
-    # to only load the context once per turn.
     if "client_context" in callback_context.invocation_context:
         return
 
@@ -94,14 +82,15 @@ def load_context_on_turn(callback_context: CallbackContext):
         print(f"DEBUG: Error pre-loading client context: {e}")
 
 
-# --- Specialist Agents ---
+# --- Specialist Agents (No changes needed here) ---
 profile_agent = Agent(name="ProfileAgent", model="gemini-2.5-flash-lite", description="For client's personal info (family, residence, interests).", tools=[get_client_profile])
 portfolio_agent = Agent(name="PortfolioAgent", model="gemini-2.5-flash-lite", description="For client's financial accounts, holdings, and net worth.", tools=[get_client_portfolio])
 product_rec_agent = Agent(name="ProductRecAgent", model="gemini-2.5-flash-lite", description="To find and recommend the best Citi product for the client.", tools=[get_citi_product_catalog])
 guidance_agent = Agent(name="CitiGuidanceAgent", model="gemini-2.5-flash-lite", description="For Citi's official investment strategy and market outlook.", tools=[get_citi_guidance])
 search_agent = Agent(name="GoogleSearchAgent", model="gemini-2.5-flash-lite", description="For general knowledge, news, weather, or real-time market data.", tools=[google_search])
 
-# --- Root Agent ---
+
+# --- Root Agent (No changes needed here) ---
 detailed_instructions = """
 You are an elite AI Wealth Advisor from Citi, a trusted, hyper-personalized partner to your client.
 
@@ -129,43 +118,34 @@ root_agent = Agent(
    before_model_callback=load_context_on_turn
 )
 
-# --- Main Execution ---
-DEFAULT_VOICE = 'Aoede'
+# --- FastAPI Server Setup ---
+app = FastAPI()
 
-async def run_live_agent(query: str, user_id: str, session_id: str, voice_name: str = DEFAULT_VOICE):
-    """Runs the agent in a live, bidirectional streaming session."""
-    runner = InMemoryRunner(agent=root_agent, plugins=[LiveInterruptPlugin()])
-    live_request_queue = LiveRequestQueue()
-    run_config = RunConfig(
-        streaming_mode=StreamingMode.BIDI,
-        speech_config=types.SpeechConfig(voice_config=types.VoiceConfig(voice=voice_name)),
-        response_modalities=["AUDIO", "TEXT", "VIDEO"],
-        proactivity=types.Proactivity(proactivity=0.1)
-    )
+# Allow requests from your web page
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # In production, restrict this to your domain
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-    live_request_queue.send_content(types.Content(role="user", parts=[types.Part(text=query)]))
-    await live_request_queue.close()
+# Configuration for the agent's live run
+run_config = RunConfig(
+    streaming_mode=StreamingMode.BIDI,
+    # Tell the model what kind of audio the browser is sending
+    speech_config=types.SpeechConfig(
+        input_audio_config=types.InputAudioConfig(
+            encoding="LINEAR16",
+            sample_rate_hertz=16000
+        )
+    ),
+    response_modalities=["AUDIO", "TEXT"],
+)
 
-    print(f"\nUser Query: '{query}' (Voice: {voice_name})")
-    print("-" * 30)
-    try:
-        async for event in runner.run_live(user_id=user_id, session_id=session_id, live_request_queue=live_request_queue, run_config=run_config):
-            if event.content and event.content.parts:
-                for part in event.content.parts:
-                    if part.text:
-                        print(f"Agent Response: {part.text}")
-    finally:
-        await runner.close()
-
-async def main():
-    """Main function to run agent examples."""
-    print("--- 1. Testing Knowledge of Age ---")
-    await run_live_agent("How old am I?", "user_123", "session_001")
-
-    print("\n\n" + "="*50 + "\n\n")
-
-    print("--- 2. Testing Personal Interest Knowledge ---")
-    await run_live_agent("What's my favorite football team?", "user_123", "session_002", voice_name='en-US-Standard-J')
+# Add the routes for creating a session and running the agent
+add_session_create_route(app, root_agent)
+add_live_run_route(app, root_agent, run_config=run_config)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    uvicorn.run(app, host="0.0.0.0", port=8000)

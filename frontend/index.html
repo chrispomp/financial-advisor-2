@@ -16,6 +16,7 @@
         #video-feed { width: 100%; height: 100%; object-fit: cover; }
         .placeholder { width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; flex-direction: column; color: #ccc; background-color: #2c2c2c; position: absolute; top: 0; left: 0; }
         .placeholder i { font-size: 80px; margin-bottom: 20px; }
+        #agent-transcript { position: absolute; bottom: 20px; left: 20px; right: 20px; background-color: rgba(0, 0, 0, 0.6); color: white; padding: 15px; border-radius: 10px; font-size: 16px; min-height: 50px; opacity: 0; transition: opacity 0.3s; }
         .status-overlay { position: absolute; top: 10px; left: 10px; background-color: rgba(0, 0, 0, 0.5); color: white; padding: 5px 10px; border-radius: 15px; font-size: 14px; display: flex; align-items: center; }
         .status-dot { width: 10px; height: 10px; border-radius: 50%; background-color: var(--primary-red); margin-right: 8px; }
         .status-dot.connected { background-color: var(--status-green); }
@@ -34,6 +35,7 @@
             <div class="video-container">
                 <div class="placeholder" id="video-placeholder"><i class="fa-solid fa-video-slash"></i><p>Session not started</p></div>
                 <video id="video-feed" autoplay muted playsinline style="display: none;"></video>
+                <div id="agent-transcript"></div>
                 <div class="status-overlay">
                     <div id="status-dot" class="status-dot"></div><span id="status-text">Disconnected</span>
                 </div>
@@ -46,26 +48,36 @@
     </div>
 
     <script>
-        const ui = { startStopBtn: document.getElementById('startStopBtn'), muteBtn: document.getElementById('muteBtn'), videoFeed: document.getElementById('video-feed'), statusText: document.getElementById('status-text'), statusDot: document.getElementById('status-dot'), placeholder: document.getElementById('video-placeholder')};
-        let state = { isConversationActive: false, isMuted: false, localStream: null, socket: null, audioContext: null, audioProcessor: null, audioContextPlayback: null };
+        const ui = {
+            startStopBtn: document.getElementById('startStopBtn'),
+            muteBtn: document.getElementById('muteBtn'),
+            videoFeed: document.getElementById('video-feed'),
+            statusText: document.getElementById('status-text'),
+            statusDot: document.getElementById('status-dot'),
+            placeholder: document.getElementById('video-placeholder'),
+            transcript: document.getElementById('agent-transcript'),
+        };
+
+        let state = {
+            isConversationActive: false,
+            isMuted: false,
+            localStream: null,
+            socket: null,
+            audioContext: null,
+            audioProcessor: null,
+            audioBufferQueue: [], // Buffer for incoming audio
+        };
 
         ui.startStopBtn.addEventListener('click', () => state.isConversationActive ? endConversation() : startConversation());
         ui.muteBtn.addEventListener('click', toggleMute);
 
-        function arrayBufferToBase64(buffer) {
-            let binary = '';
-            const bytes = new Uint8Array(buffer);
-            const len = bytes.byteLength;
-            for (let i = 0; i < len; i++) {
-                binary += String.fromCharCode(bytes[i]);
-            }
-            return window.btoa(binary);
-        }
+        // --- Core Conversation Logic ---
 
         async function startConversation() {
             try {
                 const session = await createAgentSession();
                 const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: { sampleRate: 16000, channelCount: 1 } });
+                
                 state.localStream = stream;
                 ui.videoFeed.srcObject = stream;
                 ui.videoFeed.style.display = 'block';
@@ -83,6 +95,33 @@
                 endConversation();
             }
         }
+
+        function endConversation() {
+            state.localStream?.getTracks().forEach(track => track.stop());
+            state.socket?.close();
+            state.audioContext?.close();
+            
+            ui.videoFeed.srcObject = null;
+            ui.videoFeed.style.display = 'none';
+            ui.placeholder.style.display = 'flex';
+            ui.transcript.textContent = '';
+            ui.transcript.style.opacity = 0;
+            ui.statusText.textContent = 'Disconnected';
+            ui.statusDot.classList.remove('connected');
+
+            // Reset state object
+            Object.assign(state, {
+                isConversationActive: false, isMuted: false, localStream: null,
+                socket: null, audioContext: null, audioProcessor: null, audioBufferQueue: []
+            });
+
+            ui.startStopBtn.classList.remove('active');
+            ui.startStopBtn.querySelector('i').className = 'fa-solid fa-phone';
+            ui.muteBtn.disabled = true;
+            ui.muteBtn.querySelector('i').className = 'fa-solid fa-microphone';
+        }
+
+        // --- Network and Media Setup ---
 
         async function createAgentSession() {
             const response = await fetch('http://localhost:8000/apps/citi_wealth_advisor_agent/users/user/sessions', { method: 'POST' });
@@ -102,89 +141,127 @@
                     ui.statusText.textContent = 'Connected';
                     ui.statusDot.classList.add('connected');
                     try {
-                        state.audioContext = new AudioContext({ sampleRate: 16000 });
-                        await state.audioContext.audioWorklet.addModule('audio-processor.js');
-                        state.audioProcessor = new AudioWorkletNode(state.audioContext, 'audio-processor');
-                        state.audioContext.createMediaStreamSource(stream).connect(state.audioProcessor);
-
-                        state.audioProcessor.port.onmessage = event => {
-                            if (state.socket.readyState === WebSocket.OPEN) {
-                                const base64Audio = arrayBufferToBase64(event.data);
-                                state.socket.send(JSON.stringify({ audio_in: base64Audio }));
-                            }
-                        };
+                        // Start processing microphone audio and sending it to the agent
+                        await setupMicrophoneProcessing(stream);
                         resolve();
                     } catch (e) { reject(e); }
                 };
 
-                state.socket.onmessage = async event => {
-                    // All messages from ADK are JSON strings
-                    const message = JSON.parse(event.data);
-
-                    if (message.media_format) {
-                        const sampleRate = message.media_format.audio.sample_rate_hz;
-                        console.log(`🎤 Server specified audio format with sample rate: ${sampleRate}Hz`);
-                        if (state.audioContextPlayback) {
-                           await state.audioContextPlayback.close();
-                        }
-                        state.audioContextPlayback = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: sampleRate });
-                    }
-
-                    if (message.audio_out) {
-                        if (!state.audioContextPlayback) {
-                            console.warn("Received audio data before media format was specified. Ignoring.");
-                            return;
-                        }
-                        try {
-                            // Decode Base64 audio data to ArrayBuffer
-                            const binaryString = window.atob(message.audio_out);
-                            const len = binaryString.length;
-                            const bytes = new Uint8Array(len);
-                            for (let i = 0; i < len; i++) {
-                                bytes[i] = binaryString.charCodeAt(i);
-                            }
-
-                            const audioBuffer = await state.audioContextPlayback.decodeAudioData(bytes.buffer);
-                            const source = state.audioContextPlayback.createBufferSource();
-                            source.buffer = audioBuffer;
-                            source.connect(state.audioContextPlayback.destination);
-                            source.start();
-                        } catch (e) {
-                            console.error("Error decoding or playing audio chunk:", e);
-                        }
-                    }
-
-                    if (message.text) {
-                        console.log("Agent:", message.text);
-                    }
-                };
+                state.socket.onmessage = handleAgentMessage;
                 state.socket.onerror = (err) => { console.error("❌ WebSocket Error:", err); reject(err); };
                 state.socket.onclose = () => { console.log("🔌 WebSocket closed."); if(state.isConversationActive) endConversation(); };
             });
         }
 
-        function endConversation() {
-            state.localStream?.getTracks().forEach(track => track.stop());
-            state.socket?.close();
-            state.audioContext?.close();
-            state.audioContextPlayback?.close();
-            ui.videoFeed.srcObject = null;
-            ui.videoFeed.style.display = 'none';
-            ui.placeholder.style.display = 'flex';
-            ui.statusText.textContent = 'Disconnected';
-            ui.statusDot.classList.remove('connected');
-            state = { isConversationActive: false, isMuted: false, localStream: null, socket: null, audioContext: null, audioContextPlayback: null };
-            ui.startStopBtn.classList.remove('active');
-            ui.startStopBtn.querySelector('i').className = 'fa-solid fa-phone';
-            ui.muteBtn.disabled = true;
-            ui.muteBtn.querySelector('i').className = 'fa-solid fa-microphone';
+        async function setupMicrophoneProcessing(stream) {
+            state.audioContext = new AudioContext({ sampleRate: 16000 });
+            await state.audioContext.audioWorklet.addModule('audio-processor.js');
+            state.audioProcessor = new AudioWorkletNode(state.audioContext, 'audio-processor');
+            
+            const source = state.audioContext.createMediaStreamSource(stream);
+            source.connect(state.audioProcessor);
+
+            // Listen for processed audio chunks from the worklet
+            state.audioProcessor.port.onmessage = event => {
+                if (state.socket && state.socket.readyState === WebSocket.OPEN) {
+                    // Send raw audio data directly
+                    state.socket.send(event.data);
+                }
+            };
         }
+
+        // --- Agent Message Handling ---
+
+        function handleAgentMessage(event) {
+            // If the message is binary data, it's audio. Buffer it.
+            if (event.data instanceof ArrayBuffer) {
+                state.audioBufferQueue.push(event.data);
+                return;
+            }
+            
+            // Otherwise, it's a text message (JSON string)
+            const message = JSON.parse(event.data);
+            console.log("Agent Message:", message);
+
+            if (message.text) {
+                ui.transcript.textContent = message.text;
+                ui.transcript.style.opacity = 1;
+                
+                // When we get a final text transcript, play the buffered audio
+                if (state.audioBufferQueue.length > 0) {
+                    playBufferedAudio();
+                }
+            }
+        }
+        
+        function playBufferedAudio() {
+            const totalLength = state.audioBufferQueue.reduce((acc, value) => acc + value.byteLength, 0);
+            const concatenated = new Uint8Array(totalLength);
+
+            let offset = 0;
+            for (const buffer of state.audioBufferQueue) {
+                concatenated.set(new Uint8Array(buffer), offset);
+                offset += buffer.byteLength;
+            }
+
+            // Create a WAV file from the raw PCM data and play it
+            const wavBlob = createWavBlob(concatenated.buffer, 16000);
+            const audioUrl = URL.createObjectURL(wavBlob);
+            const audio = new Audio(audioUrl);
+            audio.play();
+
+            // Clear the buffer for the next utterance
+            state.audioBufferQueue = [];
+        }
+
+
+        // --- Utility Functions ---
 
         function toggleMute() {
             if (!state.localStream) return;
             state.isMuted = !state.isMuted;
             state.localStream.getAudioTracks()[0].enabled = !state.isMuted;
             ui.muteBtn.querySelector('i').className = state.isMuted ? 'fa-solid fa-microphone-slash' : 'fa-solid fa-microphone';
+        }
+
+        function createWavBlob(pcmData, sampleRate) {
+            const header = new ArrayBuffer(44);
+            const view = new DataView(header);
+            
+            // RIFF identifier
+            writeString(view, 0, 'RIFF');
+            // file length
+            view.setUint32(4, 36 + pcmData.byteLength, true);
+            // RIFF type
+            writeString(view, 8, 'WAVE');
+            // format chunk identifier
+            writeString(view, 12, 'fmt ');
+            // format chunk length
+            view.setUint32(16, 16, true);
+            // sample format (1 for PCM)
+            view.setUint16(20, 1, true);
+            // channel count
+            view.setUint16(22, 1, true);
+            // sample rate
+            view.setUint32(24, sampleRate, true);
+            // byte rate (sample rate * block align)
+            view.setUint32(28, sampleRate * 2, true);
+            // block align (channel count * bytes per sample)
+            view.setUint16(32, 2, true);
+            // bits per sample
+            view.setUint16(34, 16, true);
+            // data chunk identifier
+            writeString(view, 36, 'data');
+            // data chunk length
+            view.setUint32(40, pcmData.byteLength, true);
+
+            return new Blob([header, pcmData], { type: 'audio/wav' });
+        }
+        
+        function writeString(view, offset, string) {
+            for (let i = 0; i < string.length; i++) {
+                view.setUint8(offset + i, string.charCodeAt(i));
+            }
         }
     </script>
 </body>
