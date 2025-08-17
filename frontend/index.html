@@ -34,7 +34,8 @@
         <header><img src="https://www.citi.com/mobile-apps/assets/img/citi-logo-white.svg" alt="Citi Logo"></header>
         <main>
             <div class="agent-view">
-                <div class="agent-placeholder" id="agent-placeholder">
+                <video id="localVideo" autoplay muted playsinline style="width: 100%; height: 100%; object-fit: cover;"></video>
+                <div class="agent-placeholder" id="agent-placeholder" style="position: absolute; background: rgba(0,0,0,0.5); padding: 20px; border-radius: 10px;">
                     <i class="fa-solid fa-brain"></i>
                     <p>Session not started</p>
                 </div>
@@ -44,8 +45,8 @@
                 </div>
             </div>
             <div class="controls">
-                <button id="muteBtn" class="control-button" disabled><i class="fa-solid fa-microphone"></i></button>
-                <button id="startStopBtn" class="control-button"><i class="fa-solid fa-phone"></i></button>
+                <button id="muteBtn" class="control-button" disabled aria-label="Mute microphone"><i class="fa-solid fa-microphone"></i></button>
+                <button id="startStopBtn" class="control-button" aria-label="Start call"><i class="fa-solid fa-phone"></i></button>
             </div>
         </main>
     </div>
@@ -69,6 +70,7 @@
             audioProcessor: null,
             audioPlayer: null,
             transcriptText: '',
+            videoStreamInterval: null,
         };
 
         let state = { ...initialState };
@@ -82,18 +84,21 @@
 
         async function startConversation() {
             try {
-                // Request audio only, aligning with API capabilities
-                const stream = await navigator.mediaDevices.getUserMedia({ video: false, audio: { sampleRate: 16000, channelCount: 1 } });
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: { ideal: 640 }, height: { ideal: 480 } },
+                    audio: { sampleRate: 16000, channelCount: 1 }
+                });
                 
                 state.localStream = stream;
-                ui.placeholder.classList.add('active');
-                ui.placeholder.querySelector('p').textContent = 'Connecting...';
+                document.getElementById('localVideo').srcObject = stream;
+                ui.placeholder.style.display = 'none'; // Hide placeholder
 
                 await connectToAgent(stream);
 
                 state.isConversationActive = true;
                 ui.startStopBtn.classList.add('active');
                 ui.startStopBtn.querySelector('i').className = 'fa-solid fa-phone-slash';
+                ui.startStopBtn.ariaLabel = 'End call';
                 ui.muteBtn.disabled = false;
                 ui.placeholder.querySelector('p').textContent = 'Listening...';
             } catch (error) {
@@ -104,11 +109,15 @@
         }
 
         function endConversation() {
+            if (state.videoStreamInterval) {
+                clearInterval(state.videoStreamInterval);
+            }
             state.localStream?.getTracks().forEach(track => track.stop());
             state.socket?.close();
             state.audioContext?.close();
-            
-            ui.placeholder.classList.remove('active');
+
+            document.getElementById('localVideo').srcObject = null;
+            ui.placeholder.style.display = 'flex';
             ui.placeholder.querySelector('p').textContent = 'Session ended';
             ui.statusText.textContent = 'Disconnected';
             ui.statusDot.classList.remove('connected');
@@ -119,6 +128,7 @@
 
             ui.startStopBtn.classList.remove('active');
             ui.startStopBtn.querySelector('i').className = 'fa-solid fa-phone';
+            ui.startStopBtn.ariaLabel = 'Start call';
             ui.muteBtn.disabled = true;
             ui.muteBtn.querySelector('i').className = 'fa-solid fa-microphone';
         }
@@ -128,7 +138,13 @@
         function connectToAgent(stream) {
             return new Promise(async (resolve, reject) => {
                 const wsUrl = serverUrl.replace('http', 'ws');
-                state.socket = new WebSocket(`${wsUrl}/run_live`);
+                // The ADK server expects user and session IDs for authorization.
+                const userId = `user_${Date.now()}`;
+                const sessionId = `session_${Date.now()}`;
+                const connectUrl = `${wsUrl}/run_live?user_id=${userId}&session_id=${sessionId}`;
+
+                console.log(`Connecting to: ${connectUrl}`);
+                state.socket = new WebSocket(connectUrl);
                 state.socket.binaryType = "arraybuffer";
 
                 state.socket.onopen = async () => {
@@ -156,9 +172,8 @@
             const recorderWorklet = new AudioWorkletNode(state.audioContext, 'audio-processor');
             source.connect(recorderWorklet);
             recorderWorklet.port.onmessage = event => {
-                if (state.socket && state.socket.readyState === WebSocket.OPEN) {
-                    state.socket.send(event.data);
-                }
+                // event.data is a Uint8Array of PCM data
+                sendPacket('audio/pcm;rate=16000', event.data.buffer);
             };
             // We need to load the module for the recorder before we can create the node
             await state.audioContext.audioWorklet.addModule('audio-processor.js');
@@ -168,6 +183,53 @@
             await state.audioContext.audioWorklet.addModule('audio-player.js');
             state.audioPlayer = new AudioWorkletNode(state.audioContext, 'audio-player-processor');
             state.audioPlayer.connect(state.audioContext.destination);
+
+            // Start streaming video frames
+            startVideoStream();
+        }
+
+        // --- Data Streaming Logic ---
+
+        function arrayBufferToBase64(buffer) {
+            let binary = '';
+            const bytes = new Uint8Array(buffer);
+            const len = bytes.byteLength;
+            for (let i = 0; i < len; i++) {
+                binary += String.fromCharCode(bytes[i]);
+            }
+            return window.btoa(binary);
+        }
+
+        function sendPacket(mimeType, data) {
+            const base64Data = arrayBufferToBase64(data);
+            const packet = {
+                content: {
+                    parts: [{ inline_data: { mime_type: mimeType, data: base64Data } }]
+                }
+            };
+            if (state.socket && state.socket.readyState === WebSocket.OPEN) {
+                state.socket.send(JSON.stringify(packet));
+            }
+        }
+
+        function startVideoStream() {
+            const videoElement = document.getElementById('localVideo');
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            const frameRate = 5; // 5 frames per second
+
+            state.videoStreamInterval = setInterval(() => {
+                if (videoElement.readyState >= 2) { // HAVE_CURRENT_DATA
+                    canvas.width = videoElement.videoWidth;
+                    canvas.height = videoElement.videoHeight;
+                    context.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+                    canvas.toBlob(blob => {
+                        blob.arrayBuffer().then(buffer => {
+                            sendPacket('image/jpeg', buffer);
+                        });
+                    }, 'image/jpeg', 0.7);
+                }
+            }, 1000 / frameRate);
         }
 
         // --- Agent Message Handling ---

@@ -8,21 +8,6 @@ from google.adk.runners import Runner, InMemoryRunner
 from google.adk.agents.run_config import RunConfig, StreamingMode
 from google.adk.plugins.base_plugin import BasePlugin
 
-# --- Live Interrupt Plugin ---
-class LiveInterruptPlugin(BasePlugin):
-    """A plugin to check for new user input and interrupt the agent's ongoing generation."""
-    def __init__(self):
-        super().__init__(name="live_interrupt_plugin")
-
-    async def before_model_callback(self, *, callback_context: CallbackContext, **kwargs):
-        invocation_context = callback_context.invocation_context
-        live_request_queue = invocation_context.live_request_queue
-        if live_request_queue and not live_request_queue.empty():
-            print("DEBUG: New message detected. Interrupting current model call.")
-            invocation_context.end_invocation = True
-            return types.Content()
-        return None
-
 # --- Data Source Tools ---
 
 def get_client_profile() -> str:
@@ -127,13 +112,14 @@ DEFAULT_VOICE = 'Aoede'
 
 async def run_live_agent(query: str, user_id: str, session_id: str, voice_name: str = DEFAULT_VOICE):
     """Runs the agent in a live, bidirectional streaming session."""
-    runner = InMemoryRunner(agent=root_agent, plugins=[LiveInterruptPlugin()])
+    runner = InMemoryRunner(agent=root_agent)
     live_request_queue = LiveRequestQueue()
     run_config = RunConfig(
         streaming_mode=StreamingMode.BIDI,
         speech_config=types.SpeechConfig(voice_config=types.VoiceConfig(voice=voice_name)),
-        response_modalities=["AUDIO", "TEXT", "VIDEO"],
-        proactivity=types.Proactivity(proactivity=0.1)
+        response_modalities=["AUDIO"],
+        output_audio_transcription={},
+        input_video_config={},
     )
 
     live_request_queue.send_content(types.Content(role="user", parts=[types.Part(text=query)]))
@@ -143,22 +129,12 @@ async def run_live_agent(query: str, user_id: str, session_id: str, voice_name: 
     print("-" * 30)
     try:
         async for event in runner.run_live(user_id=user_id, session_id=session_id, live_request_queue=live_request_queue, run_config=run_config):
+            if event.server_content and event.server_content.interrupted:
+                print("DEBUG: Agent generation interrupted by user.")
+                # In a real client, this is where you would stop playing audio
             if event.content and event.content.parts:
                 for part in event.content.parts:
                     if part.text:
                         print(f"Agent Response: {part.text}")
     finally:
         await runner.close()
-
-async def main():
-    """Main function to run agent examples."""
-    print("--- 1. Testing Knowledge of Age ---")
-    await run_live_agent("How old am I?", "user_123", "session_001")
-
-    print("\n\n" + "="*50 + "\n\n")
-
-    print("--- 2. Testing Personal Interest Knowledge ---")
-    await run_live_agent("What's my favorite football team?", "user_123", "session_002", voice_name='en-US-Standard-J')
-
-if __name__ == "__main__":
-    asyncio.run(main())
