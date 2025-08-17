@@ -79,7 +79,6 @@
 
         async function startConversation() {
             try {
-                const session = await createAgentSession();
                 const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: { sampleRate: 16000, channelCount: 1 } });
                 
                 state.localStream = stream;
@@ -87,7 +86,7 @@
                 ui.videoFeed.style.display = 'block';
                 ui.placeholder.style.display = 'none';
 
-                await connectToAgent(session.id, stream);
+                await connectToAgent(stream);
 
                 state.isConversationActive = true;
                 ui.startStopBtn.classList.add('active');
@@ -124,18 +123,10 @@
 
         // --- Network and Media Setup ---
 
-        async function createAgentSession() {
-            const response = await fetch(`${serverUrl}/apps/citi_wealth_advisor_agent/users/user/sessions`, { method: 'POST' });
-            if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
-            const session = await response.json();
-            console.log(`✅ Session created: ${session.id}`);
-            return session;
-        }
-
-        function connectToAgent(sessionId, stream) {
+        function connectToAgent(stream) {
             return new Promise(async (resolve, reject) => {
                 const wsUrl = serverUrl.replace('http', 'ws');
-                state.socket = new WebSocket(`${wsUrl}/run_live?app_name=citi_wealth_advisor_agent&user_id=user&session_id=${sessionId}`);
+                state.socket = new WebSocket(`${wsUrl}/run_live`);
                 state.socket.binaryType = "arraybuffer";
 
                 state.socket.onopen = async () => {
@@ -198,7 +189,7 @@
         
         function playBufferedAudio() {
             if (state.audioBufferQueue.length === 0) return;
-
+            
             const pcmData = new Blob(state.audioBufferQueue);
 
             // Create a WAV file from the raw PCM data and play it

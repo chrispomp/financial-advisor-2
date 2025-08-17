@@ -1,14 +1,16 @@
 import json
 import asyncio
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
-from google.adk.agents import Agent
+from google.adk.agents import Agent, LiveRequestQueue
 from google.adk.tools import google_search, agent_tool
 from google.adk.agents.callback_context import CallbackContext
 from google.genai import types
 from google.adk.agents.run_config import RunConfig, StreamingMode
-from google.adk.extensions.fastapi_runner import add_live_run_route, add_session_create_route
+from google.adk.runners import Runner
+from google.adk.sessions.in_memory_session_service import InMemorySessionService
+from google.genai.types import Content, Part
 
 # --- Data Source Tools (No changes needed here) ---
 
@@ -132,22 +134,97 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Configuration for the agent's live run
-run_config = RunConfig(
-    streaming_mode=StreamingMode.BIDI,
-    # Tell the model what kind of audio the browser is sending
-    speech_config=types.SpeechConfig(
-        input_audio_config=types.InputAudioConfig(
-            encoding="LINEAR16",
-            sample_rate_hertz=16000
-        )
-    ),
-    response_modalities=["AUDIO", "TEXT"],
+runner = Runner(
+    app_name="citi_wealth_advisor_agent",
+    agent=root_agent,
+    session_service=InMemorySessionService(),
 )
 
-# Add the routes for creating a session and running the agent
-add_session_create_route(app, root_agent)
-add_live_run_route(app, root_agent, run_config=run_config)
+async def start_agent_session(user_id, is_audio=False):
+    """Starts an agent session"""
+    # Create a Session
+    session = await runner.session_service.create_session(
+        app_name="citi_wealth_advisor_agent",
+        user_id=user_id,
+    )
+
+    # Set response modality
+    modality = "AUDIO" if is_audio else "TEXT"
+    run_config = RunConfig(
+        response_modalities=[modality],
+        speech_config=types.SpeechConfig(
+            input_audio_config=types.InputAudioConfig(
+                encoding="LINEAR16",
+                sample_rate_hertz=16000
+            )
+        )
+    )
+
+    # Create a LiveRequestQueue for this session
+    live_request_queue = LiveRequestQueue()
+
+    # Start agent session
+    live_events = runner.run_live(
+        session=session,
+        live_request_queue=live_request_queue,
+        run_config=run_config,
+    )
+    return live_events, live_request_queue
+
+async def agent_to_client_messaging(websocket, live_events):
+    """Agent to client communication"""
+    while True:
+        async for event in live_events:
+            if event.turn_complete or event.interrupted:
+                message = {
+                    "turn_complete": event.turn_complete,
+                    "interrupted": event.interrupted,
+                }
+                await websocket.send_text(json.dumps(message))
+                continue
+
+            part: Part = (
+                event.content and event.content.parts and event.content.parts[0]
+            )
+            if not part:
+                continue
+
+            if part.text:
+                message = {
+                    "text": part.text
+                }
+                await websocket.send_text(json.dumps(message))
+
+            if part.inline_data:
+                await websocket.send_bytes(part.inline_data.data)
+
+
+async def client_to_agent_messaging(websocket, live_request_queue):
+    """Client to agent communication"""
+    while True:
+        data = await websocket.receive_bytes()
+        live_request_queue.send_realtime(
+            types.Blob(data=data, mime_type="audio/webm")
+        )
+
+@app.websocket("/run_live")
+async def websocket_endpoint(websocket: WebSocket):
+    """Client websocket endpoint"""
+    await websocket.accept()
+    live_events, live_request_queue = await start_agent_session("user", is_audio=True)
+
+    agent_to_client_task = asyncio.create_task(
+        agent_to_client_messaging(websocket, live_events)
+    )
+    client_to_agent_task = asyncio.create_task(
+        client_to_agent_messaging(websocket, live_request_queue)
+    )
+
+    tasks = [agent_to_client_task, client_to_agent_task]
+    await asyncio.wait(tasks, return_when=asyncio.FIRST_EXCEPTION)
+
+    live_request_queue.close()
+
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
