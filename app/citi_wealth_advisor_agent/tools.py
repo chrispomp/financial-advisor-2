@@ -13,14 +13,14 @@ def get_client_profile() -> str:
       "preferred_name": "Chris",
       "relationship_manager": "Jane Foster",
       "personal_info": {
-        "age": 45,
-        "birthday": "1980-08-16",
+        "age": 43,
+        "birthday": "1982-08-16",
         "occupation": "Senior Director, Product Management",
         "employer": "Global Tech Firm",
         "residence": {"city": "Long Beach", "state": "NY"},
         "family": {
           "marital_status": "Married",
-          "spouse": {"name": "Emily Evans", "age": 44, "occupation": "Anesthesiologist"},
+          "spouse": {"name": "Emily Evans", "age": 41, "occupation": "Anesthesiologist"},
           "dependents": [
             {"name": "Sophia", "relation": "Daughter", "age": 16, "interests": "College applications, soccer"},
             {"name": "Liam", "relation": "Son", "age": 13, "interests": "Video games, learning to code"}
@@ -36,7 +36,7 @@ def get_client_profile() -> str:
         ],
         "recent_activity": {
           "description": "Unusually large cash deposit of $800,000, which may indicate a significant life event (e.g., inheritance, property sale).",
-          "date": "2025-08-01"
+          "date": "2025-08-14"
         }
       },
       "goals_and_objectives": [
@@ -45,8 +45,12 @@ def get_client_profile() -> str:
       ],
       "citi_relationship": {
         "client_since": 2015,
-        "last_contact": {"date": "2025-07-15", "topic": "Quarterly portfolio review with Jane Foster."},
-        "actionable_opportunities": [
+        "last_human_contact": {"date": "2025-07-15", "topic": "Quarterly portfolio review with Jane Foster."},
+        "last_agent_interaction": {
+            "date": "2025-08-17",
+            "summary": "Client asked about their portfolio performance and inquired about local activities for the upcoming weekend. The agent provided details on their top holdings and suggested attending the New York Jets game."
+        },
+        "personalized_recommendations": [
           {"area": "Wealth Planning", "action": "Discuss investment strategies for the recent large cash deposit."},
           {"area": "Credit & Lending", "action": "Client does not have a Citi credit card. They are an excellent candidate for the Citi Strata Elite Card based on their net worth and spending patterns."},
           {"area": "Education Planning", "action": "Discuss benefits and funding of 529 College Savings Plans for Sophia and Liam."}
