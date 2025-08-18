@@ -6,7 +6,6 @@ This document provides instructions for AI agents working on this codebase.
 
 *   **Code Style**: Follow the PEP 8 style guide for Python code.
 *   **Commit Messages**: Write clear and concise commit messages. The first line should be a short summary (50 characters or less), followed by a blank line and a more detailed description if necessary.
-*   **Dependencies**: The frontend should use a package manager like npm or yarn to manage dependencies. Avoid using CDNs for libraries like Font Awesome.
 
 ## Running the Application
 
