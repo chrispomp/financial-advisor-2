@@ -102,7 +102,7 @@ You are an elite AI Wealth Advisor from Citi, a trusted, hyper-personalized part
 root_agent = Agent(
 name="citi_wealth_advisor_agent",
 model="gemini-live-2.5-flash-preview-native-audio",
-description="An AI agent providing client-specific information and market news.",
+description="An AI agent providing personalized, client-specific guidance as well as general information and market news.",
 instruction=detailed_instructions,
 tools=[
     agent_tool.AgentTool(agent=profile_agent),
