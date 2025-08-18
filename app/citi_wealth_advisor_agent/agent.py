@@ -47,7 +47,7 @@ class LiveInterruptPlugin(BasePlugin):
         return await self._check_for_interrupt(callback_context)
 
 # --- Specialist Agents ---
-model = "gemini-2.5-flash"
+model = "gemini-2.5-flash-lite"
 
 profile_agent = Agent(
   name="ClientProfileAgent",
