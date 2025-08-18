@@ -50,24 +50,24 @@ class LiveInterruptPlugin(BasePlugin):
 model = "gemini-2.5-flash-lite"
 
 profile_agent = Agent(
-  name="ClientProfileAgent",
-  model=model,
-  description="Use this agent to retrieve detailed information about the wealth management client. It can access the client's full profile, including personal details (name, age, family members like spouse and children, residence, interests), financial data (net worth, holdings), goals, last agent interaction and last human interaction, and relationship history with Citi. This is the primary source for any client-related questions.",
-  tools=[tools.get_client_profile]
+ name="ClientProfileAgent",
+ model=model,
+ description="Use this agent to retrieve detailed information about the wealth management client. It can access the client's full profile, including personal details (name, age, family members like spouse and children, residence, interests), financial data (net worth, holdings), goals, last agent interaction and last human interaction, and relationship history with Citi. This is the primary source for any client-related questions.",
+ tools=[tools.get_client_profile]
 )
 
 guidance_agent = Agent(
-  name="CitiGuidanceAgent",
-  model=model,
-  description="Use this agent to retrieve the latest investment strategy and market outlook from Citi's Chief Investment Officer (CIO). It provides the official view on global markets, strategic asset allocation models, and key investment themes. Use this as the basis for all investment recommendations.",
-  tools=[tools.get_citi_guidance]
+ name="CitiGuidanceAgent",
+ model=model,
+ description="Use this agent to retrieve the latest investment strategy and market outlook from Citi's Chief Investment Officer (CIO). It provides the official view on global markets, strategic asset allocation models, and key investment themes. Use this as the basis for all investment recommendations.",
+ tools=[tools.get_citi_guidance]
 )
 
 search_agent = Agent(
-  name="GoogleSearchAgent",
-  model=model,
-  description="Use this agent for all general knowledge questions, such as current events, real-time market news, or any information not found in the client's profile or the CIO's guidance.",
-  tools=[google_search]
+ name="GoogleSearchAgent",
+ model=model,
+ description="Use this agent for all general knowledge questions, such as current events, real-time market news, or any information not found in the client's profile or the CIO's guidance.",
+ tools=[google_search]
 )
 
 # --- Root Agent ---
@@ -80,18 +80,33 @@ You are an elite AI Wealth Advisor from Citi, a trusted, hyper-personalized part
 2.  **Client Profile is the Source of Truth (ABSOLUTE RULE):** For ANY question about the client—including personal details, finances, goals, relationship history, or summaries of past conversations—you MUST ALWAYS use the `ClientProfileAgent` and find the answer in the JSON it returns. Do not guess or use another tool if the information might be in the profile.
 3.  **Vision First:** If asked about what you see, answer based on the visual input from the camera.
 4.  **Location Mandate:** For any location-based question (e.g., "what's the weather?"), you MUST use the client's `residence` from the profile in your tool call.
+
+**Multi-Step Briefing Protocols:**
+5.  **Stock Performance Query:** If the user asks how their stocks performed (e.g., "how did my stocks do last week?"), you MUST follow this sequence:
+    a. Call `ClientProfileAgent` to get the list of `top_holdings`.
+    b. Call `GoogleSearchAgent` with the list of stock tickers to find their recent performance news.
+    c. Synthesize the results into a clear summary for the client.
+6.  **Personal Briefing Query:** If the user asks for a "personal briefing", you MUST follow this sequence:
+    a. Call `ClientProfileAgent` to retrieve `recent_activity` and `personalized_recommendations`.
+    b. Call `CitiGuidanceAgent` to get the latest `cio_outlook_summary`.
+    c. Combine all retrieved information into a holistic, personalized summary.
+7.  **Market Briefing Query:** If the user asks for a "market briefing", you MUST follow this sequence:
+    a. Call `ClientProfileAgent` to get the list of equity `top_holdings`.
+    b. Call `GoogleSearchAgent` to get a general market update (e.g., on the S&P 500 or NASDAQ).
+    c. In a separate call to `GoogleSearchAgent`, get specific updates for the client's individual stock holdings.
+    d. Structure your response with the general update first, followed by the personalized stock news.
 """
 
 root_agent = Agent(
- name="citi_wealth_advisor_agent",
- model="gemini-live-2.5-flash-preview-native-audio",
- description="An AI agent providing client-specific information and market news.",
- instruction=detailed_instructions,
- tools=[
-     agent_tool.AgentTool(agent=profile_agent),
-     agent_tool.AgentTool(agent=search_agent),
-     agent_tool.AgentTool(agent=guidance_agent)
- ]
+name="citi_wealth_advisor_agent",
+model="gemini-live-2.5-flash-preview-native-audio",
+description="An AI agent providing client-specific information and market news.",
+instruction=detailed_instructions,
+tools=[
+    agent_tool.AgentTool(agent=profile_agent),
+    agent_tool.AgentTool(agent=search_agent),
+    agent_tool.AgentTool(agent=guidance_agent)
+]
 )
 
 # --- Main Execution Block ---
@@ -100,7 +115,7 @@ async def main():
     # The runner must be initialized with the plugin for interrupts to work.
     runner = InMemoryRunner(agent=root_agent, plugins=[LiveInterruptPlugin()])
     live_request_queue = LiveRequestQueue()
-    
+  
     # RunConfig enables features like video, proactivity, and interrupts.
     run_config = RunConfig(
         streaming_mode=StreamingMode.BIDI,
