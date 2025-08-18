@@ -153,7 +153,7 @@ async def main():
         streaming_mode=StreamingMode.BIDI,
         speech_config=types.SpeechConfig(
             voice_config=types.VoiceConfig(
-                voice='Sadachbia',
+                voice='Puck',
                 speaking_rate=1.5
             )
         ),
