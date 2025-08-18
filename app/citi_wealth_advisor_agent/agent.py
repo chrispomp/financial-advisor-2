@@ -5,8 +5,7 @@ from google.adk.tools import google_search, agent_tool
 from . import tools
 
 # --- Specialist Agents ---
-# NOTE: Per your instructions, the Gemini model names have not been changed.
-model = "gemini-2.5-flash-lite"
+model = "gemini-2.5-flash"
 
 profile_agent = Agent(
     name="ClientProfileAgent",
