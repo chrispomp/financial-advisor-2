@@ -16,18 +16,18 @@ def preload_client_context(callback_context: CallbackContext):
     try:
         # Use invocation_state, which is designed for per-turn data persistence.
         invocation_state = callback_context.invocation_state
-        
+      
         # Only load the context once per turn to avoid redundant operations.
         if "client_context" in invocation_state:
             return
 
         print("DEBUG: Pre-loading client context into invocation_state.")
         profile_data = json.loads(tools.get_client_profile())
-        
+      
         # Store data directly in the invocation_state dictionary.
         invocation_state["client_context"] = profile_data
         invocation_state["preferred_name"] = profile_data.get("preferred_name")
-        
+      
         print(f"DEBUG: Client context successfully pre-loaded for '{invocation_state['preferred_name']}'.")
     except Exception as e:
         print(f"DEBUG: CRITICAL ERROR pre-loading client context: {e}")
@@ -70,15 +70,15 @@ You are an elite AI Wealth Advisor from Citi, a trusted and hyper-personalized p
 """
 
 root_agent = Agent(
-   name="citi_wealth_advisor_agent",
-   model="gemini-live-2.5-flash-preview-native-audio",
-   description="An AI agent providing client-specific information and market news.",
-   instruction=detailed_instructions,
-   tools=[
-       agent_tool.AgentTool(agent=profile_agent),
-       agent_tool.AgentTool(agent=search_agent),
-       agent_tool.AgentTool(agent=guidance_agent)
-   ],
-   # This callback ensures the client's profile is loaded before the agent thinks.
-   before_agent_callback=preload_client_context
+    name="citi_wealth_advisor_agent",
+    model="gemini-live-2.5-flash-preview-native-audio",
+    description="An AI agent providing client-specific information and market news.",
+    instruction=detailed_instructions,
+    tools=[
+        agent_tool.AgentTool(agent=profile_agent),
+        agent_tool.AgentTool(agent=search_agent),
+        agent_tool.AgentTool(agent=guidance_agent)
+    ],
+    # This callback ensures the client's profile is loaded before the agent thinks.
+    before_agent_callback=preload_client_context
 )
