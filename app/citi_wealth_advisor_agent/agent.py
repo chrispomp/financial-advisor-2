@@ -1,5 +1,3 @@
-# citi_wealth_advisor_agent/agent.py
-
 import json
 import asyncio
 from google.adk.agents import Agent, LiveRequestQueue
@@ -13,17 +11,35 @@ from google.adk.plugins.base_plugin import BasePlugin
 # Import the tools from your tools.py file
 from . import tools
 
-# --- Live Interrupt Plugin ---
+# --- State Management Logic ---
+def save_profile_to_state(*, callback_context: CallbackContext):
+    """
+    After 'get_client_profile' is called, this saves the result into the
+    session_state to be reused across the conversation.
+    """
+    tool_call_event = callback_context.tool_code_execution
+    if not tool_call_event or tool_call_event.tool_name != "get_client_profile":
+        return
+
+    try:
+        profile_data = json.loads(tool_call_event.tool_result)
+        session_state = callback_context.session_state
+        if "client_context" not in session_state:
+            session_state["client_context"] = profile_data
+            print(f"DEBUG: Client profile for '{profile_data.get('preferred_name')}' saved to session state.")
+    except Exception as e:
+        print(f"DEBUG: ERROR saving profile to state: {e}")
+
+# --- Live Interrupt & State Management Plugin ---
 class LiveInterruptPlugin(BasePlugin):
     """
-    A plugin to check for new user input and interrupt the agent's ongoing generation
-    at multiple points in the agent lifecycle for maximum responsiveness.
+    A plugin to handle both live interrupts and state management.
     """
     def __init__(self):
         super().__init__(name="live_interrupt_plugin")
 
     async def _check_for_interrupt(self, callback_context: CallbackContext):
-        """Checks the live request queue and signals to end the invocation if new input is found."""
+        """Checks the live request queue for interrupts."""
         if hasattr(callback_context, 'invocation_context'):
             invocation_context = callback_context.invocation_context
             if hasattr(invocation_context, 'live_request_queue'):
@@ -44,80 +60,79 @@ class LiveInterruptPlugin(BasePlugin):
         return await self._check_for_interrupt(callback_context)
 
     async def after_tool_call(self, *, callback_context: CallbackContext, **kwargs):
+        """
+        This method now handles both saving the profile to state AND checking for interrupts.
+        """
+        save_profile_to_state(callback_context=callback_context)
         return await self._check_for_interrupt(callback_context)
 
 # --- Specialist Agents ---
 model = "gemini-2.5-flash-lite"
 
 profile_agent = Agent(
- name="ClientProfileAgent",
- model=model,
- description="Use this agent to retrieve detailed information about the wealth management client. It can access the client's full profile, including personal details (name, age, family members like spouse and children, residence, interests), financial data (net worth, holdings), goals, last agent interaction and last human interaction, and relationship history with Citi. This is the primary source for any client-related questions.",
- tools=[tools.get_client_profile]
+    name="ClientProfileAgent",
+    model=model,
+    description="Use this agent to retrieve the client's complete profile, including personal details, financial data, goals, and relationship history.",
+    tools=[tools.get_client_profile]
 )
 
 guidance_agent = Agent(
- name="CitiGuidanceAgent",
- model=model,
- description="Use this agent to retrieve the latest investment strategy and market outlook from Citi's Chief Investment Officer (CIO). It provides the official view on global markets, strategic asset allocation models, and key investment themes. Use this as the basis for all investment recommendations.",
- tools=[tools.get_citi_guidance]
+    name="CitiGuidanceAgent",
+    model=model,
+    description="Retrieves the latest investment strategy and market outlook from Citi's CIO.",
+    tools=[tools.get_citi_guidance]
 )
 
 search_agent = Agent(
- name="GoogleSearchAgent",
- model=model,
- description="Use this agent for all general knowledge questions, such as current events, real-time market news, or any information not found in the client's profile or the CIO's guidance.",
- tools=[google_search]
+    name="GoogleSearchAgent",
+    model=model,
+    description="Used for general knowledge, current events, or real-time market news.",
+    tools=[google_search]
 )
 
 # --- Root Agent ---
 detailed_instructions = """
-You are an elite AI Wealth Advisor from Citi, a trusted, hyper-personalized partner to your client.
+You are an elite AI Wealth Advisor from Citi. You are a trusted, hyper-personalized, and conversational partner to your client.
 
-**Core Directives & Operational Plan:**
-0.  **Stop Command:** If the user's input is only the word "STOP", you MUST NOT generate a response. Your only action is to wait for the user's next question.
-1.  **First Turn Protocol (CRITICAL):** On the very first turn, you MUST call `ClientProfileAgent` to get the profile. After the tool call, greet the user by their `preferred_name`. Then, analyze their initial message:
-    a. If the message is a simple greeting (e.g., "hi", "hello"), you MUST respond with a simple greeting back, like "How can I help you today?". Do NOT provide any unsolicited summaries or recommendations.
-    b. If the message is a direct question, answer that question using the profile information you have just retrieved.
-2.  **Client Profile is the Source of Truth (ABSOLUTE RULE):** For ANY question about the client—including personal details, finances, goals, relationship history, or summaries of past conversations—you MUST ALWAYS use the `ClientProfileAgent` and find the answer in the JSON it returns. Do not guess or use another tool if the information might be in the profile.
-3.  **Vision First:** If asked about what you see, answer based on the visual input from the camera.
-4.  **Location Mandate:** For any location-based question (e.g., "what's the weather?"), you MUST use the client's `residence` from the profile in your tool call.
+### Core Logic
 
-**Multi-Step Briefing Protocols:**
-5.  **Stock Performance Query:** If the user asks how their stocks performed (e.g., "how did my stocks do last week?"), you MUST follow this sequence:
-    a. Call `ClientProfileAgent` to get the list of `top_holdings`.
-    b. Call `GoogleSearchAgent` with the list of stock tickers to find their recent performance news.
-    c. Synthesize the results into a clear summary for the client.
-6.  **Personal Briefing Query:** If the user explicitly asks for a "personal briefing", you MUST follow this sequence:
-    a. Call `ClientProfileAgent` to retrieve `recent_activity` and `personalized_recommendations`.
-    b. Call `CitiGuidanceAgent` to get the latest `cio_outlook_summary`.
-    c. Combine all retrieved information into a holistic, personalized summary.
-7.  **Market Briefing Query:** If the user explicitly asks for a "market briefing", you MUST follow this sequence:
-    a. Call `ClientProfileAgent` to get the list of equity `top_holdings`.
-    b. Call `GoogleSearchAgent` to get a general market update (e.g., on the S&P 500 or NASDAQ).
-    c. In a separate call to `GoogleSearchAgent`, get specific updates for the client's individual stock holdings.
-    d. Structure your response with the general update first, followed by the personalized stock news.
+1.  **First Turn Protocol (ABSOLUTE RULE):** On the very first turn of a new conversation, your first and ONLY action MUST be to call the `ClientProfileAgent` to retrieve the user's full profile. Do not say anything to the user yet. After the tool call returns, your first response MUST greet the user by their `preferred_name` and then address their original question.
+
+2.  **Stateful Memory (CRITICAL):** After the first turn, the complete client profile is stored in your memory. For ALL subsequent questions about the client (personal details, finances, goals), you MUST use this stored information. DO NOT call the `ClientProfileAgent` again unless the user asks you to refresh their data.
+
+3.  **Tool Usage Hierarchy:**
+    a.  First: Use the stored client profile from your memory.
+    b.  Second: For market outlook or investment strategy, use the `CitiGuidanceAgent`.
+    c.  Last Resort: For real-time news or external information, use the `GoogleSearchAgent`.
+
+4.  **Synthesize, Don't Recite:** Never just output raw data. Synthesize information into a single, natural-sounding response.
+
+5.  **Vision & Stop Commands:** If asked about what you see, use visual input. If the user says "STOP", cease your response.
+
+### Conversational Flow & Briefings
+
+6.  **Personalization:** For any query that can be personalized (local activities, weather), you MUST use the `residence` and `personal_interests` from the stored profile to inform your `GoogleSearchAgent` call.
+
+7.  **Briefing Protocols:** When asked for a "personal briefing," "market briefing," or "stock performance," use the relevant data from your stored profile and the appropriate specialist agent (`CitiGuidanceAgent` or `GoogleSearchAgent`) to construct a comprehensive answer.
 """
 
 root_agent = Agent(
-name="citi_wealth_advisor_agent",
-model="gemini-live-2.5-flash-preview-native-audio",
-description="An AI agent providing personalized, client-specific guidance as well as general information and market news.",
-instruction=detailed_instructions,
-tools=[
-    agent_tool.AgentTool(agent=profile_agent),
-    agent_tool.AgentTool(agent=search_agent),
-    agent_tool.AgentTool(agent=guidance_agent)
-]
+    name="citi_wealth_advisor_agent",
+    model="gemini-live-2.5-flash-preview-native-audio",
+    description="An AI agent providing personalized, client-specific guidance and market news.",
+    instruction=detailed_instructions,
+    tools=[
+        agent_tool.AgentTool(agent=profile_agent),
+        agent_tool.AgentTool(agent=search_agent),
+        agent_tool.AgentTool(agent=guidance_agent)
+    ]
 )
 
 # --- Main Execution Block ---
 async def main():
     """Main function to run a live agent example."""
-    # The runner must be initialized with the plugin for interrupts to work.
+    # The runner must be initialized with the plugin to handle interrupts and state.
     runner = InMemoryRunner(agent=root_agent, plugins=[LiveInterruptPlugin()])
-  
-    # RunConfig enables features like video, proactivity, and interrupts.
     run_config = RunConfig(
         streaming_mode=StreamingMode.BIDI,
         speech_config=types.SpeechConfig(voice_config=types.VoiceConfig(voice='en-US-Standard-H')),
@@ -126,16 +141,19 @@ async def main():
         proactivity=types.Proactivity(proactivity=0.1)
     )
 
-    # Example query
-    query = "What did we talk about last time?"
+    query = "What is my daughter's age?"
     user_id = "user_123"
-    session_id = "session_xyz"
-    
+    session_id = "session_def"
+
     live_request_queue = LiveRequestQueue()
     live_request_queue.send_content(types.Content(role="user", parts=[types.Part(text=query)]))
+    # Add a second turn to test state
+    await asyncio.sleep(4) # Simulate pause in conversation
+    live_request_queue.send_content(types.Content(role="user", parts=[types.Part(text="And how old is my son?")]))
     await live_request_queue.close()
 
-    print(f"\nUser Query: '{query}'")
+
+    print(f"\nUser Queries Sent...")
     print("-" * 30)
     try:
         full_response = []
@@ -143,8 +161,9 @@ async def main():
             if event.content and event.content.parts:
                 for part in event.content.parts:
                     if part.text:
+                        print(f"Agent Response Chunk: {part.text}")
                         full_response.append(part.text)
-        print(f"Agent Response: {''.join(full_response)}")
+        print(f"\nFull Agent Response: {''.join(full_response)}")
     finally:
         await runner.close()
 
