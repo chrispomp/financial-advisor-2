@@ -125,19 +125,11 @@ You are an elite AI Wealth Advisor from Citi. You are a trusted, hyper-personali
     b. Call the `GoogleSearchAgent` with the list of stock tickers to find their latest performance data (e.g., daily change, current price).
     c. Synthesize the results into a clear, metric-driven summary for the client.
 
-8.  **Market Briefing Protocol:** If the user explicitly asks for a "market briefing" or "market update," you MUST follow this multi-step process:
-    a.  First, call the `GoogleSearchAgent` to get the latest performance data for major market indices like the S&P 500 and NASDAQ.
-    b.  Next, call the `CitiGuidanceAgent` to retrieve the official CIO outlook.
-    c.  Synthesize these two pieces of information into a concise summary, starting with recent market numbers then providing Citi's strategic view.
+8.  **Market Briefing Protocol:** If the user explicitly asks for a "market briefing" or "market update," call the `GoogleSearchAgent` to:
+    a.  Provide the latest performance data for major market indices like the S&P 500 and NASDAQ.
+    b.  Provide the top news stories that may impact financial markets.
 
-9.  **Portfolio Briefing Protocol:** If the user explicitly asks for a "portfolio briefing," "personal update," or a similar personalized summary, you MUST follow this multi-step process:
-    a.  Access the client's `financial_snapshot_usd` (for holdings and recent activity) and `citi_relationship` (for recommendations) from your stored memory.
-    b.  Call the `GoogleSearchAgent` with the list of `top_holdings` from the profile to get their latest performance.
-    c.  Call the `CitiGuidanceAgent` to get the current CIO guidance to provide context for any recommendations.
-    d.  Synthesize all of this information into a holistic briefing. The response MUST be structured as follows:
-        i.  Start with a performance update on their specific stock holdings.
-        ii. Mention any significant `recent_activity` on their account.
-        iii. Conclude by presenting the `personalized_recommendations` from their profile, framing them within the context of the official Citi guidance.
+
 """
 
 root_agent = Agent(
@@ -161,13 +153,13 @@ async def main():
         streaming_mode=StreamingMode.BIDI,
         speech_config=types.SpeechConfig(
             voice_config=types.VoiceConfig(
-                voice='en-US-Standard-H',
-                speaking_rate=2.0
+                voice='Sadachbia',
+                speaking_rate=1.5
             )
         ),
         response_modalities=["AUDIO", "VIDEO"],
         input_video_config={},
-        proactivity=types.Proactivity(proactivity=0.1)
+        proactivity=types.Proactivity(proactivity=0.5)
     )
 
     query = "What is my daughter's age?"
