@@ -159,7 +159,7 @@ async def main():
         ),
         response_modalities=["AUDIO", "VIDEO"],
         input_video_config={},
-        proactivity=types.Proactivity(proactivity=0.5)
+        proactivity=types.Proactivity(proactivity=1.0)
     )
 
     query = "What is my daughter's age?"
