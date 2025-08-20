@@ -1,5 +1,5 @@
 AI Wealth Advisor Agent
-This project implements a sophisticated AI Wealth Advisor agent for Citi, built using the Google Agent Development Kit (ADK). The agent is designed to be a hyper-personalized partner for clients, providing instant access to their profile, portfolio, and relevant financial guidance in a live, interactive conversation.
+This project implements a sophisticated AI Wealth Advisor agent, built using the Google Agent Development Kit (ADK). The agent is designed to be a hyper-personalized partner for clients, providing instant access to their profile, portfolio, and relevant financial guidance in a live, interactive conversation.
 
 It uses a hierarchical structure, with a central "Root Agent" that delegates tasks to specialized agents for handling specific domains like client profiles, portfolios, product recommendations, and real-time market data via Google Search.
 
@@ -12,7 +12,7 @@ Live Interruptibility: A custom plugin allows the agent to be interrupted mid-ta
 
 Multi-modal Responses: Capable of streaming responses that include text and audio.
 
-Consolidated Knowledge Base: Integrates static client data with real-time information from Google Search and official Citi guidance.
+Consolidated Knowledge Base: Integrates static client data with real-time information from Google Search and official Firm guidance.
 
 🛠️ Setup and Installation
 Prerequisites
